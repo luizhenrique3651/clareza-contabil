@@ -41,22 +41,58 @@ public record AuthenticatedTenantContext(
         requestId = (requestId == null || requestId.isBlank()) ? UUID.randomUUID().toString() : requestId;
     }
 
+    private static final java.util.Map<String, Set<String>> PERMISSION_EQUIVALENTS = java.util.Map.ofEntries(
+            java.util.Map.entry("context.read", Set.of("companies.view", "financial.view")),
+            java.util.Map.entry("company.read", Set.of("companies.view")),
+            java.util.Map.entry("branch.read", Set.of("companies.view", "financial.view")),
+            java.util.Map.entry("catalog.read", Set.of("financial.view", "financial.manage", "payables.view", "receivables.view")),
+            java.util.Map.entry("catalog.write", Set.of("financial.manage")),
+            java.util.Map.entry("financial.read", Set.of("financial.view", "payables.view", "receivables.view")),
+            java.util.Map.entry("financial.write", Set.of("financial.manage", "payables.manage", "receivables.manage")),
+            java.util.Map.entry("financial.settle", Set.of("financial.manage", "payables.manage", "receivables.manage")),
+            java.util.Map.entry("financial.cancel", Set.of("financial.manage", "payables.manage", "receivables.manage")),
+            java.util.Map.entry("bank.read", Set.of("financial.view")),
+            java.util.Map.entry("bank.write", Set.of("financial.manage")),
+            java.util.Map.entry("reconciliation.read", Set.of("financial.view", "bank.read")),
+            java.util.Map.entry("reconciliation.write", Set.of("financial.manage", "bank.write")),
+            java.util.Map.entry("accounting.read", Set.of("accounting.view")),
+            java.util.Map.entry("audit.read", Set.of("audit.view"))
+    );
+
     public boolean hasPermission(String permission) {
-        return permissions.contains(Objects.requireNonNull(permission, "permission must not be null"));
+        Objects.requireNonNull(permission, "permission must not be null");
+        if (permissions.contains(permission)) {
+            return true;
+        }
+        Set<String> equivalents = PERMISSION_EQUIVALENTS.get(permission);
+        if (equivalents != null) {
+            for (String eq : equivalents) {
+                if (permissions.contains(eq)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public boolean canAccessCompany(UUID companyId) {
         if (companyId == null) {
             return false;
         }
-        return tenantWideAccess || allowedCompanyIds.contains(companyId);
+        if (tenantWideAccess || allowedCompanyIds.contains(companyId)) {
+            return true;
+        }
+        return companyId.equals(activeCompanyId) && !allowedBranchIds.isEmpty();
     }
 
     public boolean canAccessBranch(UUID branchId) {
         if (branchId == null) {
-            return true;
+            return tenantWideAccess || allowedCompanyIds.contains(activeCompanyId);
         }
-        return tenantWideAccess || allowedBranchIds.isEmpty() || allowedBranchIds.contains(branchId);
+        if (tenantWideAccess || allowedCompanyIds.contains(activeCompanyId)) {
+            return allowedBranchIds.isEmpty() || allowedBranchIds.contains(branchId);
+        }
+        return allowedBranchIds.contains(branchId);
     }
 
     public String companyIdsCsv() {

@@ -3,16 +3,20 @@ package br.com.mouraoclareza.financial.application;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogDomainPolicy;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogDomainPolicy.ValidatedCategory;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogDomainPolicy.ValidatedCostCenter;
+import br.com.mouraoclareza.financial.domain.FinancialCatalogDomainPolicy.ValidatedFinancialAccount;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogDomainPolicy.ValidatedParty;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CostCenterView;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreateCategoryRequest;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreateCostCenterRequest;
+import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreateFinancialAccountRequest;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreatePartyRequest;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CursorPageResponse;
+import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.FinancialAccountView;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.FinancialCategoryView;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.PageInfo;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.PartyView;
 import br.com.mouraoclareza.shared.audit.AuditTrailService;
+import br.com.mouraoclareza.shared.exception.ResourceConflictException;
 import br.com.mouraoclareza.shared.idempotency.IdempotencyExecutor;
 import br.com.mouraoclareza.shared.idempotency.IdempotencyExecutor.IdempotentResult;
 import br.com.mouraoclareza.shared.idempotency.IdempotencyExecutor.ResponseEnvelope;
@@ -21,17 +25,20 @@ import br.com.mouraoclareza.shared.pagination.BoundCursorCodec.CursorScope;
 import br.com.mouraoclareza.shared.security.AuthenticatedTenantContext;
 import br.com.mouraoclareza.shared.security.RlsTransactionExecutor;
 import br.com.mouraoclareza.shared.security.TenantContextHolder;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Serviço de aplicação transacional para gestão de Participantes, Categorias Financeiras e Centros de Custo.
- * Preserva RLS, RBAC, idempotência e trilha de auditoria da Fase 2.
+ * Serviço de aplicação transacional para gestão de Catálogos Financeiros:
+ * counterparties, financial_categories, cost_centers e financial_accounts.
+ * Alinhado 100% com o schema PostgreSQL de V5__financial_operations.sql e V6__phase_two_hardening.sql (FIX-04 e FIX-06).
  */
 @Service
 public class FinancialCatalogService {
@@ -56,46 +63,66 @@ public class FinancialCatalogService {
     public CursorPageResponse<PartyView> listParties(String roleFilter, String cursor, int rawLimit) {
         AuthenticatedTenantContext ctx = TenantContextHolder.requirePermission("catalog.read");
         int limit = clampLimit(rawLimit);
+        String dbKindFilter = normalizePartyKindFilter(roleFilter);
         CursorScope scope = new CursorScope(
-                "parties",
+                "counterparties",
                 ctx.tenantId(),
                 ctx.activeCompanyId(),
                 ctx.activeBranchId(),
-                "legal_name_asc,id_asc",
-                roleFilter != null ? Map.of("role", roleFilter) : Map.of()
+                "name_asc,id_asc",
+                dbKindFilter != null ? Map.of("kind", dbKindFilter) : Map.of()
         );
-        Map<String, Object> decoded = BoundCursorCodec.decodeCursor(cursor, scope);
+        Map<String, Object> cursorPos = BoundCursorCodec.decodeCursor(cursor, scope);
+        String cursorName = cursorPos != null ? (String) cursorPos.get("name") : null;
+        UUID cursorId = cursorPos != null && cursorPos.get("id") != null
+                ? UUID.fromString(cursorPos.get("id").toString())
+                : null;
 
         return rlsExecutor.executeInTenantTransaction(ctx, () -> {
             List<PartyView> rows = jdbcTemplate.query(
                     """
-                    SELECT id, tenant_id, company_id, branch_id, legal_name, trade_name,
-                           document_type, document_number, party_role, email, status, created_at
-                      FROM parties
+                    SELECT id, tenant_id, company_id, branch_id, code, name,
+                           tax_id, kind::text AS kind, is_active, created_at
+                      FROM counterparties
                      WHERE tenant_id = ?
                        AND company_id = ?
-                       AND (? IS NULL OR party_role = ?)
-                     ORDER BY legal_name ASC, id ASC
+                       AND deleted_at IS NULL
+                       AND is_active = true
+                       AND (?::uuid IS NULL OR branch_id IS NULL OR branch_id = ?::uuid)
+                       AND (?::text IS NULL OR kind = ?::counterparty_kind)
+                       AND (?::text IS NULL OR (name, id) > (?::text, ?::uuid))
+                     ORDER BY name ASC, id ASC
                      LIMIT ?
                     """,
-                    (rs, rowNum) -> new PartyView(
-                            rs.getObject("id", UUID.class),
-                            rs.getObject("tenant_id", UUID.class),
-                            rs.getObject("company_id", UUID.class),
-                            rs.getObject("branch_id", UUID.class),
-                            rs.getString("legal_name"),
-                            rs.getString("trade_name"),
-                            rs.getString("document_type"),
-                            rs.getString("document_number"),
-                            rs.getString("party_role"),
-                            rs.getString("email"),
-                            rs.getString("status"),
-                            rs.getTimestamp("created_at").toInstant()
-                    ),
+                    (rs, rowNum) -> {
+                        String taxId = rs.getString("tax_id");
+                        String docType = taxId != null && taxId.length() == 11 ? "CPF" : "CNPJ";
+                        String name = rs.getString("name");
+                        return new PartyView(
+                                rs.getObject("id", UUID.class),
+                                rs.getObject("tenant_id", UUID.class),
+                                rs.getObject("company_id", UUID.class),
+                                rs.getObject("branch_id", UUID.class),
+                                rs.getString("code"),
+                                name,
+                                name,
+                                docType,
+                                taxId,
+                                rs.getString("kind"),
+                                null,
+                                rs.getBoolean("is_active") ? "ACTIVE" : "INACTIVE",
+                                rs.getTimestamp("created_at").toInstant()
+                        );
+                    },
                     ctx.tenantId(),
                     ctx.activeCompanyId(),
-                    roleFilter,
-                    roleFilter,
+                    ctx.activeBranchId(),
+                    ctx.activeBranchId(),
+                    dbKindFilter,
+                    dbKindFilter,
+                    cursorName,
+                    cursorName,
+                    cursorId,
                     limit + 1
             );
 
@@ -105,7 +132,7 @@ public class FinancialCatalogService {
             if (hasNext && !pageItems.isEmpty()) {
                 PartyView last = pageItems.getLast();
                 nextCursor = BoundCursorCodec.encodeCursor(scope, Map.of(
-                        "legalName", last.legalName(),
+                        "name", last.legalName(),
                         "id", last.id().toString()
                 ));
             }
@@ -118,6 +145,7 @@ public class FinancialCatalogService {
         UUID effectiveBranchId = request.branchId() != null ? request.branchId() : ctx.activeBranchId();
         TenantContextHolder.assertCompanyAndBranchAccess(ctx.activeCompanyId(), effectiveBranchId);
         ValidatedParty validated = FinancialCatalogDomainPolicy.validatePartyInput(
+                request.code(),
                 request.legalName(),
                 request.tradeName(),
                 request.documentNumber(),
@@ -134,30 +162,37 @@ public class FinancialCatalogService {
                         () -> {
                             UUID id = UUID.randomUUID();
                             Instant now = Instant.now();
-                            jdbcTemplate.update(
-                                    """
-                                    INSERT INTO parties (
-                                        id, tenant_id, company_id, branch_id, legal_name, trade_name,
-                                        document_type, document_number, party_role, email, status
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-                                    """,
-                                    id,
-                                    ctx.tenantId(),
-                                    ctx.activeCompanyId(),
-                                    effectiveBranchId,
-                                    validated.legalName(),
-                                    validated.tradeName(),
-                                    validated.documentType(),
-                                    validated.documentNumber(),
-                                    validated.partyRole(),
-                                    validated.email()
-                            );
+                            try {
+                                jdbcTemplate.update(
+                                        """
+                                        INSERT INTO counterparties (
+                                            id, tenant_id, company_id, branch_id, code, name,
+                                            tax_id, kind, is_active, created_by_id
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?::counterparty_kind, true, ?)
+                                        """,
+                                        id,
+                                        ctx.tenantId(),
+                                        ctx.activeCompanyId(),
+                                        effectiveBranchId,
+                                        validated.code(),
+                                        validated.legalName(),
+                                        validated.documentNumber(),
+                                        validated.dbKind(),
+                                        ctx.userId()
+                                );
+                            } catch (DuplicateKeyException ex) {
+                                throw new ResourceConflictException(
+                                        "FINANCIAL_CATALOG_CONFLICT",
+                                        "Já existe um participante cadastrado com este código na empresa ativa."
+                                );
+                            }
 
                             PartyView created = new PartyView(
                                     id,
                                     ctx.tenantId(),
                                     ctx.activeCompanyId(),
                                     effectiveBranchId,
+                                    validated.code(),
                                     validated.legalName(),
                                     validated.tradeName(),
                                     validated.documentType(),
@@ -170,13 +205,13 @@ public class FinancialCatalogService {
 
                             auditTrailService.recordAuditLog(
                                     "financial.party.created",
-                                    "party",
-                                    id.toString(),
+                                    "counterparty",
+                                    id,
                                     effectiveBranchId,
                                     null,
                                     created
                             );
-                            return new ResponseEnvelope<>(201, created);
+                            return new ResponseEnvelope<>(201, "counterparty", id, created);
                         }
                 )
         );
@@ -185,41 +220,63 @@ public class FinancialCatalogService {
     public CursorPageResponse<FinancialCategoryView> listCategories(String kindFilter, String cursor, int rawLimit) {
         AuthenticatedTenantContext ctx = TenantContextHolder.requirePermission("catalog.read");
         int limit = clampLimit(rawLimit);
+        String dbDirectionFilter = normalizeDirectionFilter(kindFilter);
         CursorScope scope = new CursorScope(
                 "financial_categories",
                 ctx.tenantId(),
                 ctx.activeCompanyId(),
                 ctx.activeBranchId(),
                 "code_asc,id_asc",
-                kindFilter != null ? Map.of("kind", kindFilter) : Map.of()
+                dbDirectionFilter != null ? Map.of("direction", dbDirectionFilter) : Map.of()
         );
-        BoundCursorCodec.decodeCursor(cursor, scope);
+        Map<String, Object> cursorPos = BoundCursorCodec.decodeCursor(cursor, scope);
+        String cursorCode = cursorPos != null ? (String) cursorPos.get("code") : null;
+        UUID cursorId = cursorPos != null && cursorPos.get("id") != null
+                ? UUID.fromString(cursorPos.get("id").toString())
+                : null;
 
         return rlsExecutor.executeInTenantTransaction(ctx, () -> {
             List<FinancialCategoryView> rows = jdbcTemplate.query(
                     """
-                    SELECT id, tenant_id, company_id, code, name, kind, status, created_at
+                    SELECT id, tenant_id, company_id, branch_id, code, name,
+                           direction::text AS direction, is_active, created_at
                       FROM financial_categories
                      WHERE tenant_id = ?
                        AND company_id = ?
-                       AND (? IS NULL OR kind = ?)
+                       AND deleted_at IS NULL
+                       AND is_active = true
+                       AND (?::uuid IS NULL OR branch_id IS NULL OR branch_id = ?::uuid)
+                       AND (?::text IS NULL OR direction = ?::financial_direction)
+                       AND (?::text IS NULL OR (code, id) > (?::text, ?::uuid))
                      ORDER BY code ASC, id ASC
                      LIMIT ?
                     """,
-                    (rs, rowNum) -> new FinancialCategoryView(
-                            rs.getObject("id", UUID.class),
-                            rs.getObject("tenant_id", UUID.class),
-                            rs.getObject("company_id", UUID.class),
-                            rs.getString("code"),
-                            rs.getString("name"),
-                            rs.getString("kind"),
-                            rs.getString("status"),
-                            rs.getTimestamp("created_at").toInstant()
-                    ),
+                    (rs, rowNum) -> {
+                        String direction = rs.getString("direction");
+                        String kind = "PAYABLE".equals(direction) ? "EXPENSE"
+                                : ("RECEIVABLE".equals(direction) ? "REVENUE" : "BOTH");
+                        return new FinancialCategoryView(
+                                rs.getObject("id", UUID.class),
+                                rs.getObject("tenant_id", UUID.class),
+                                rs.getObject("company_id", UUID.class),
+                                rs.getObject("branch_id", UUID.class),
+                                rs.getString("code"),
+                                rs.getString("name"),
+                                kind,
+                                direction,
+                                rs.getBoolean("is_active") ? "ACTIVE" : "INACTIVE",
+                                rs.getTimestamp("created_at").toInstant()
+                        );
+                    },
                     ctx.tenantId(),
                     ctx.activeCompanyId(),
-                    kindFilter,
-                    kindFilter,
+                    ctx.activeBranchId(),
+                    ctx.activeBranchId(),
+                    dbDirectionFilter,
+                    dbDirectionFilter,
+                    cursorCode,
+                    cursorCode,
+                    cursorId,
                     limit + 1
             );
 
@@ -239,6 +296,8 @@ public class FinancialCatalogService {
 
     public IdempotentResult<FinancialCategoryView> createCategory(String idempotencyKey, CreateCategoryRequest request) {
         AuthenticatedTenantContext ctx = TenantContextHolder.requirePermission("catalog.write");
+        UUID effectiveBranchId = request.branchId() != null ? request.branchId() : ctx.activeBranchId();
+        TenantContextHolder.assertCompanyAndBranchAccess(ctx.activeCompanyId(), effectiveBranchId);
         ValidatedCategory validated = FinancialCatalogDomainPolicy.validateCategoryInput(
                 request.code(),
                 request.name(),
@@ -254,27 +313,39 @@ public class FinancialCatalogService {
                         () -> {
                             UUID id = UUID.randomUUID();
                             Instant now = Instant.now();
-                            jdbcTemplate.update(
-                                    """
-                                    INSERT INTO financial_categories (
-                                        id, tenant_id, company_id, code, name, kind, status
-                                    ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')
-                                    """,
-                                    id,
-                                    ctx.tenantId(),
-                                    ctx.activeCompanyId(),
-                                    validated.code(),
-                                    validated.name(),
-                                    validated.kind()
-                            );
+                            try {
+                                jdbcTemplate.update(
+                                        """
+                                        INSERT INTO financial_categories (
+                                            id, tenant_id, company_id, branch_id, code, name,
+                                            direction, is_active, created_by_id
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?::financial_direction, true, ?)
+                                        """,
+                                        id,
+                                        ctx.tenantId(),
+                                        ctx.activeCompanyId(),
+                                        effectiveBranchId,
+                                        validated.code(),
+                                        validated.name(),
+                                        validated.dbDirection(),
+                                        ctx.userId()
+                                );
+                            } catch (DuplicateKeyException ex) {
+                                throw new ResourceConflictException(
+                                        "FINANCIAL_CATALOG_CONFLICT",
+                                        "Já existe uma categoria financeira com este código na empresa ativa."
+                                );
+                            }
 
                             FinancialCategoryView created = new FinancialCategoryView(
                                     id,
                                     ctx.tenantId(),
                                     ctx.activeCompanyId(),
+                                    effectiveBranchId,
                                     validated.code(),
                                     validated.name(),
                                     validated.kind(),
+                                    validated.dbDirection(),
                                     "ACTIVE",
                                     now
                             );
@@ -282,12 +353,12 @@ public class FinancialCatalogService {
                             auditTrailService.recordAuditLog(
                                     "financial.category.created",
                                     "financial_category",
-                                    id.toString(),
-                                    ctx.activeBranchId(),
+                                    id,
+                                    effectiveBranchId,
                                     null,
                                     created
                             );
-                            return new ResponseEnvelope<>(201, created);
+                            return new ResponseEnvelope<>(201, "financial_category", id, created);
                         }
                 )
         );
@@ -304,15 +375,23 @@ public class FinancialCatalogService {
                 "code_asc,id_asc",
                 Map.of()
         );
-        BoundCursorCodec.decodeCursor(cursor, scope);
+        Map<String, Object> cursorPos = BoundCursorCodec.decodeCursor(cursor, scope);
+        String cursorCode = cursorPos != null ? (String) cursorPos.get("code") : null;
+        UUID cursorId = cursorPos != null && cursorPos.get("id") != null
+                ? UUID.fromString(cursorPos.get("id").toString())
+                : null;
 
         return rlsExecutor.executeInTenantTransaction(ctx, () -> {
             List<CostCenterView> rows = jdbcTemplate.query(
                     """
-                    SELECT id, tenant_id, company_id, branch_id, code, name, status, created_at
+                    SELECT id, tenant_id, company_id, branch_id, code, name, is_active, created_at
                       FROM cost_centers
                      WHERE tenant_id = ?
                        AND company_id = ?
+                       AND deleted_at IS NULL
+                       AND is_active = true
+                       AND (?::uuid IS NULL OR branch_id IS NULL OR branch_id = ?::uuid)
+                       AND (?::text IS NULL OR (code, id) > (?::text, ?::uuid))
                      ORDER BY code ASC, id ASC
                      LIMIT ?
                     """,
@@ -323,11 +402,16 @@ public class FinancialCatalogService {
                             rs.getObject("branch_id", UUID.class),
                             rs.getString("code"),
                             rs.getString("name"),
-                            rs.getString("status"),
+                            rs.getBoolean("is_active") ? "ACTIVE" : "INACTIVE",
                             rs.getTimestamp("created_at").toInstant()
                     ),
                     ctx.tenantId(),
                     ctx.activeCompanyId(),
+                    ctx.activeBranchId(),
+                    ctx.activeBranchId(),
+                    cursorCode,
+                    cursorCode,
+                    cursorId,
                     limit + 1
             );
 
@@ -363,19 +447,27 @@ public class FinancialCatalogService {
                         () -> {
                             UUID id = UUID.randomUUID();
                             Instant now = Instant.now();
-                            jdbcTemplate.update(
-                                    """
-                                    INSERT INTO cost_centers (
-                                        id, tenant_id, company_id, branch_id, code, name, status
-                                    ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')
-                                    """,
-                                    id,
-                                    ctx.tenantId(),
-                                    ctx.activeCompanyId(),
-                                    effectiveBranchId,
-                                    validated.code(),
-                                    validated.name()
-                            );
+                            try {
+                                jdbcTemplate.update(
+                                        """
+                                        INSERT INTO cost_centers (
+                                            id, tenant_id, company_id, branch_id, code, name, is_active, created_by_id
+                                        ) VALUES (?, ?, ?, ?, ?, ?, true, ?)
+                                        """,
+                                        id,
+                                        ctx.tenantId(),
+                                        ctx.activeCompanyId(),
+                                        effectiveBranchId,
+                                        validated.code(),
+                                        validated.name(),
+                                        ctx.userId()
+                                );
+                            } catch (DuplicateKeyException ex) {
+                                throw new ResourceConflictException(
+                                        "FINANCIAL_CATALOG_CONFLICT",
+                                        "Já existe um centro de custo com este código na empresa ativa."
+                                );
+                            }
 
                             CostCenterView created = new CostCenterView(
                                     id,
@@ -391,15 +483,184 @@ public class FinancialCatalogService {
                             auditTrailService.recordAuditLog(
                                     "financial.cost_center.created",
                                     "cost_center",
-                                    id.toString(),
+                                    id,
                                     effectiveBranchId,
                                     null,
                                     created
                             );
-                            return new ResponseEnvelope<>(201, created);
+                            return new ResponseEnvelope<>(201, "cost_center", id, created);
                         }
                 )
         );
+    }
+
+    public CursorPageResponse<FinancialAccountView> listFinancialAccounts(String cursor, int rawLimit) {
+        AuthenticatedTenantContext ctx = TenantContextHolder.requirePermission("catalog.read");
+        int limit = clampLimit(rawLimit);
+        CursorScope scope = new CursorScope(
+                "financial_accounts",
+                ctx.tenantId(),
+                ctx.activeCompanyId(),
+                ctx.activeBranchId(),
+                "code_asc,id_asc",
+                Map.of()
+        );
+        Map<String, Object> cursorPos = BoundCursorCodec.decodeCursor(cursor, scope);
+        String cursorCode = cursorPos != null ? (String) cursorPos.get("code") : null;
+        UUID cursorId = cursorPos != null && cursorPos.get("id") != null
+                ? UUID.fromString(cursorPos.get("id").toString())
+                : null;
+
+        return rlsExecutor.executeInTenantTransaction(ctx, () -> {
+            List<FinancialAccountView> rows = jdbcTemplate.query(
+                    """
+                    SELECT id, tenant_id, company_id, branch_id, code, name,
+                           type::text AS type, currency_code, is_active, created_at
+                      FROM financial_accounts
+                     WHERE tenant_id = ?
+                       AND company_id = ?
+                       AND deleted_at IS NULL
+                       AND is_active = true
+                       AND (?::uuid IS NULL OR branch_id IS NULL OR branch_id = ?::uuid)
+                       AND (?::text IS NULL OR (code, id) > (?::text, ?::uuid))
+                     ORDER BY code ASC, id ASC
+                     LIMIT ?
+                    """,
+                    (rs, rowNum) -> new FinancialAccountView(
+                            rs.getObject("id", UUID.class),
+                            rs.getObject("tenant_id", UUID.class),
+                            rs.getObject("company_id", UUID.class),
+                            rs.getObject("branch_id", UUID.class),
+                            rs.getString("code"),
+                            rs.getString("name"),
+                            rs.getString("type"),
+                            rs.getString("currency_code"),
+                            rs.getBoolean("is_active") ? "ACTIVE" : "INACTIVE",
+                            rs.getTimestamp("created_at").toInstant()
+                    ),
+                    ctx.tenantId(),
+                    ctx.activeCompanyId(),
+                    ctx.activeBranchId(),
+                    ctx.activeBranchId(),
+                    cursorCode,
+                    cursorCode,
+                    cursorId,
+                    limit + 1
+            );
+
+            boolean hasNext = rows.size() > limit;
+            List<FinancialAccountView> pageItems = hasNext ? rows.subList(0, limit) : rows;
+            String nextCursor = null;
+            if (hasNext && !pageItems.isEmpty()) {
+                FinancialAccountView last = pageItems.getLast();
+                nextCursor = BoundCursorCodec.encodeCursor(scope, Map.of(
+                        "code", last.code(),
+                        "id", last.id().toString()
+                ));
+            }
+            return new CursorPageResponse<>(pageItems, new PageInfo(limit, hasNext, nextCursor));
+        });
+    }
+
+    public IdempotentResult<FinancialAccountView> createFinancialAccount(
+            String idempotencyKey,
+            CreateFinancialAccountRequest request
+    ) {
+        AuthenticatedTenantContext ctx = TenantContextHolder.requirePermission("catalog.write");
+        UUID effectiveBranchId = request.branchId() != null ? request.branchId() : ctx.activeBranchId();
+        TenantContextHolder.assertCompanyAndBranchAccess(ctx.activeCompanyId(), effectiveBranchId);
+        ValidatedFinancialAccount validated = FinancialCatalogDomainPolicy.validateFinancialAccountInput(
+                request.code(),
+                request.name(),
+                request.type(),
+                request.currencyCode()
+        );
+
+        return rlsExecutor.executeInTenantTransaction(ctx, () ->
+                idempotencyExecutor.execute(
+                        "financial.account.create",
+                        idempotencyKey,
+                        request,
+                        FinancialAccountView.class,
+                        () -> {
+                            UUID id = UUID.randomUUID();
+                            Instant now = Instant.now();
+                            try {
+                                jdbcTemplate.update(
+                                        """
+                                        INSERT INTO financial_accounts (
+                                            id, tenant_id, company_id, branch_id, code, name,
+                                            type, currency_code, is_active, created_by_id
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?::financial_account_type, ?, true, ?)
+                                        """,
+                                        id,
+                                        ctx.tenantId(),
+                                        ctx.activeCompanyId(),
+                                        effectiveBranchId,
+                                        validated.code(),
+                                        validated.name(),
+                                        validated.type(),
+                                        validated.currencyCode(),
+                                        ctx.userId()
+                                );
+                            } catch (DuplicateKeyException ex) {
+                                throw new ResourceConflictException(
+                                        "FINANCIAL_CATALOG_CONFLICT",
+                                        "Já existe uma conta financeira com este código na empresa ativa."
+                                );
+                            }
+
+                            FinancialAccountView created = new FinancialAccountView(
+                                    id,
+                                    ctx.tenantId(),
+                                    ctx.activeCompanyId(),
+                                    effectiveBranchId,
+                                    validated.code(),
+                                    validated.name(),
+                                    validated.type(),
+                                    validated.currencyCode(),
+                                    "ACTIVE",
+                                    now
+                            );
+
+                            auditTrailService.recordAuditLog(
+                                    "financial.account.created",
+                                    "financial_account",
+                                    id,
+                                    effectiveBranchId,
+                                    null,
+                                    created
+                            );
+                            return new ResponseEnvelope<>(201, "financial_account", id, created);
+                        }
+                )
+        );
+    }
+
+    private String normalizePartyKindFilter(String rawRole) {
+        if (rawRole == null || rawRole.isBlank()) {
+            return null;
+        }
+        String upper = rawRole.trim().toUpperCase(Locale.ROOT);
+        return switch (upper) {
+            case "CUSTOMER" -> "CUSTOMER";
+            case "SUPPLIER" -> "SUPPLIER";
+            case "BOTH", "OTHER" -> "BOTH";
+            default -> null;
+        };
+    }
+
+    private String normalizeDirectionFilter(String rawKind) {
+        if (rawKind == null || rawKind.isBlank()) {
+            return null;
+        }
+        String upper = rawKind.trim().toUpperCase(Locale.ROOT);
+        return switch (upper) {
+            case "EXPENSE", "PAYABLE" -> "PAYABLE";
+            case "REVENUE", "RECEIVABLE" -> "RECEIVABLE";
+            case "BOTH" -> "BOTH";
+            default -> null;
+        };
     }
 
     private int clampLimit(int rawLimit) {

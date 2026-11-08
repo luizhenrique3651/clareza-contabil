@@ -111,7 +111,10 @@ public final class FinancialRecordDomainPolicy {
                     "O título financeiro já está cancelado."
             );
         }
-        if ("SETTLED".equals(currentStatus) || "PARTIALLY_SETTLED".equals(currentStatus) || settledAmount.isPositive()) {
+        if ("SETTLED".equals(currentStatus)
+                || "PARTIAL".equals(currentStatus)
+                || "PARTIALLY_SETTLED".equals(currentStatus)
+                || settledAmount.isPositive()) {
             throw new ResourceConflictException(
                     "FINANCIAL_RECORD_HAS_SETTLEMENTS",
                     "Não é permitido cancelar um título que já possui baixas financeiras registradas."

@@ -8,6 +8,7 @@ import br.com.mouraoclareza.financial.domain.FinancialRecordModels.CreateSettlem
 import br.com.mouraoclareza.financial.domain.FinancialRecordModels.FinancialEventView;
 import br.com.mouraoclareza.financial.domain.FinancialRecordModels.FinancialRecordView;
 import br.com.mouraoclareza.financial.domain.FinancialRecordModels.FinancialSummaryView;
+import br.com.mouraoclareza.financial.domain.FinancialRecordModels.ReverseSettlementRequest;
 import br.com.mouraoclareza.shared.domain.DomainIds;
 import br.com.mouraoclareza.shared.idempotency.IdempotencyExecutor.IdempotentResult;
 import org.springframework.http.ResponseEntity;
@@ -23,12 +24,15 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Controller REST para Títulos Financeiros (Contas a Pagar / Contas a Receber), Baixas, Cancelamentos,
- * Sumário Executivo e Eventos Imutáveis (/api/v1/financial-records, /api/v1/financial-summary, /api/v1/financial-events).
+ * Controller REST para Títulos Financeiros (payables / receivables), Baixas (payments / receipts),
+ * Estornos (payment_reversals / receipt_reversals), Cancelamentos, Sumário Executivo e Eventos Imutáveis
+ * (/api/v1/financial-records, /api/v1/financial-summary, /api/v1/financial-events).
  */
 @RestController
 @RequestMapping("/api/v1")
 public class FinancialRecordsController {
+
+    private static final String IDEMPOTENCY_REPLAYED_HEADER = "Idempotency-Replayed";
 
     private final FinancialRecordService recordService;
 
@@ -58,7 +62,9 @@ public class FinancialRecordsController {
             @RequestBody CreateFinancialRecordRequest request
     ) {
         IdempotentResult<FinancialRecordView> result = recordService.createRecord(idempotencyKey, request);
-        return ResponseEntity.status(result.status()).body(result.body());
+        return ResponseEntity.status(result.status())
+                .header(IDEMPOTENCY_REPLAYED_HEADER, Boolean.toString(result.replayed()))
+                .body(result.body());
     }
 
     @PostMapping("/financial-records/{id}/settlements")
@@ -69,7 +75,29 @@ public class FinancialRecordsController {
     ) {
         UUID recordId = DomainIds.parseUuid(rawId, "id", "INVALID_RECORD_ID");
         IdempotentResult<FinancialRecordView> result = recordService.settleRecord(recordId, idempotencyKey, request);
-        return ResponseEntity.status(result.status()).body(result.body());
+        return ResponseEntity.status(result.status())
+                .header(IDEMPOTENCY_REPLAYED_HEADER, Boolean.toString(result.replayed()))
+                .body(result.body());
+    }
+
+    @PostMapping("/financial-records/{id}/settlements/{settlementId}/reverse")
+    public ResponseEntity<FinancialRecordView> reverseSettlement(
+            @PathVariable("id") String rawId,
+            @PathVariable("settlementId") String rawSettlementId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody ReverseSettlementRequest request
+    ) {
+        UUID recordId = DomainIds.parseUuid(rawId, "id", "INVALID_RECORD_ID");
+        UUID settlementId = DomainIds.parseUuid(rawSettlementId, "settlementId", "INVALID_SETTLEMENT_ID");
+        IdempotentResult<FinancialRecordView> result = recordService.reverseSettlement(
+                recordId,
+                settlementId,
+                idempotencyKey,
+                request
+        );
+        return ResponseEntity.status(result.status())
+                .header(IDEMPOTENCY_REPLAYED_HEADER, Boolean.toString(result.replayed()))
+                .body(result.body());
     }
 
     @PostMapping("/financial-records/{id}/cancel")
@@ -80,7 +108,9 @@ public class FinancialRecordsController {
     ) {
         UUID recordId = DomainIds.parseUuid(rawId, "id", "INVALID_RECORD_ID");
         IdempotentResult<FinancialRecordView> result = recordService.cancelRecord(recordId, idempotencyKey, request);
-        return ResponseEntity.status(result.status()).body(result.body());
+        return ResponseEntity.status(result.status())
+                .header(IDEMPOTENCY_REPLAYED_HEADER, Boolean.toString(result.replayed()))
+                .body(result.body());
     }
 
     @GetMapping("/financial-summary")

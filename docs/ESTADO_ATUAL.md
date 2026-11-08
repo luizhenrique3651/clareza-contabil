@@ -2,32 +2,40 @@
 
 **Última atualização:** 2026-11-08  
 **Repositório Oficial:** `/Users/luiz/Documents/clareza-contabil`  
-**Épico Ativo:** `EPIC-05` (Sprints 5–6 — Importação Bancária OFX/CSV & Conciliação 1:1)  
-**Task Ativa:** `CLZ-015` (Parsers determinísticos OFX 1.x/2.x e CSV + `BankMovementHashCalculator`)
+**Épico Ativo:** `EPIC-06` (Sprint 7 — Frontend React 19 Completo: Workspace Financeiro & Conciliação)  
+**Task Ativa:** `CLZ-018` (Workspace Financeiro Completo em React 19 integrado às APIs `/api/v1/financial-*`)
 
 ---
 
-## 1. O que já está concluído e validado (`CLZ-001` a `CLZ-014`)
+## 1. Adequação Completa da Auditoria Sênior (`FIX-01` a `FIX-07` — Concluída)
 
-1. **Fundação Monorepo SDD & Migrações Flyway (`EPIC-01` — `CLZ-001` a `CLZ-003`):**
-   - Contrato OpenAPI 3.1 ([`specs/openapi/clareza-api-v1.yaml`](../specs/openapi/clareza-api-v1.yaml)), 7 ADRs individuais ([`specs/adr/ADR-001` a `ADR-007`](../specs/adr)) com índice roteador em [`docs/DECISOES_ARQUITETURAIS.md`](./DECISOES_ARQUITETURAIS.md) e cenários Gherkin ([`specs/features/financial_and_reconciliation.feature`](../specs/features/financial_and_reconciliation.feature)).
-   - Migrações Flyway `V1__init.sql` a `V8__user_sessions_and_auth_hardening.sql` em `backend/src/main/resources/db/migration/`.
+Todas as correções apontadas em [`docs/PLANO_CORRECAO_BACKEND_ALINHAMENTO_SQL_PERFORMANCE.md`](./PLANO_CORRECAO_BACKEND_ALINHAMENTO_SQL_PERFORMANCE.md) foram integralmente implementadas e verificadas:
 
-2. **Shared Kernel de Segurança e Finanças (`EPIC-02` — `CLZ-004` a `CLZ-006`):**
-   - `Money` (`BigDecimal` escala 4, `NUMERIC(19,4)`), `DomainIds`, `AuthenticatedTenantContext`, `TenantContextHolder`, `RlsTransactionExecutor` (`SET LOCAL ROLE clarity_app` + `set_config`), `IdempotencyExecutor` (`pg_advisory_xact_lock`), `AuditTrailService` (`integrity_hash` SHA-256), `BoundCursorCodec` e `GlobalExceptionHandler` (RFC 9457).
-
-3. **IAM, Sessão Verificada e Seletor de Contexto React (`EPIC-03` — `CLZ-007` a `CLZ-010`):**
-   - `IdentityAccessDirectoryService`, `RolePermissionsCatalog`, `MeController` (`GET /api/v1/me`), `ClarezaAuthenticationFilter` e `ClarezaSecurityConfig`.
-   - Frontend React 19 + Vite 6 com `http-client.ts`, `identity-client.ts`, `safeNavigationStorage` e `ApplicationContext.tsx` protegido contra *race conditions*.
-
-4. **Núcleo Operacional Financeiro Completo (`EPIC-04` — `CLZ-011` a `CLZ-014`):**
-   - Catálogos Financeiros (`FinancialCatalogDomainPolicy`, `FinancialCatalogService`, `FinancialCatalogsController` para `/api/v1/financial-parties`, `/api/v1/financial-categories`, `/api/v1/cost-centers`).
-   - Títulos Financeiros AP/AR, Baixas Parciais/Integrais, Cancelamento, Sumário Executivo e Eventos Imutáveis (`FinancialRecordDomainPolicy`, `FinancialRecordService`, `FinancialRecordsController` para `/api/v1/financial-records`, `/api/v1/financial-summary`, `/api/v1/financial-events`).
+1. **`FIX-01` (`IdempotencyExecutor` & Controllers):**
+   - Validação estrita do header `Idempotency-Key` com regex `^[A-Za-z0-9._:-]{8,128}$` (`422 INVALID_IDEMPOTENCY_KEY`).
+   - Queries `SELECT`, `DELETE` (para chaves expiradas) e `INSERT` alinhadas 100% com `idempotency_records` de `V3__financial_api_foundation.sql` (`key`, `resource_type`, `resource_id`, `expires_at`).
+   - Retorno do header HTTP `Idempotency-Replayed: true|false` em todos os endpoints `POST` (`FinancialCatalogsController`, `FinancialRecordsController`, `BankReconciliationController`).
+2. **`FIX-02` (`AuditTrailService`):**
+   - Parâmetro `entityId` tipado como `UUID` e `INSERT INTO audit_logs` alinhado 100% com `V1__init.sql` (`entity_id`, `before_data`, `after_data`, `metadata`, `integrity_hash`).
+3. **`FIX-03` (`IdentityAccessDirectoryService`, `ClarezaAuthenticationFilter`, `MeController`, `V8`):**
+   - Função `app.resolve_session_token(text)` (`SECURITY DEFINER`) adicionada em `V8__user_sessions_and_auth_hardening.sql`.
+   - `AccessRow` e `IdentityAccessDirectoryService` alinhados com as 11 colunas reais de `app.resolve_identity_access(text)`.
+   - Regra crítica de RLS para escopo `BRANCH` aplicada (`allowedCompanyIds = List.of()` quando o usuário possui apenas vínculo `BRANCH` na empresa ativa, exigindo seleção de filial).
+   - Eliminação do duplo round-trip em `GET /api/v1/me` via atributo de request `clareza.identitySummary`.
+4. **`FIX-04` (`FinancialCatalogService`):**
+   - Alinhado 100% com `counterparties` (`kind::counterparty_kind`), `financial_categories` (`direction::financial_direction`), `cost_centers` e `financial_accounts` (`type::financial_account_type`) de `V5` e `V6`, incluindo tratamento de `DuplicateKeyException` $\rightarrow$ `409 FINANCIAL_CATALOG_CONFLICT`.
+5. **`FIX-05` (`FinancialRecordService` & `BankReconciliationService`):**
+   - Alinhado 100% com `payables`, `receivables`, `payments`, `payment_reversals`, `receipts` e `receipt_reversals` (`V1`, `V5`, `V6`), respeitando as triggers `payables_projection_guard` e `receivables_projection_guard` (`pg_trigger_depth()`) e `payments_refresh_projection` / `receipts_refresh_projection`.
+   - Conciliação bancária (`EPIC-05`) alinhada 100% com `bank_imports`, `bank_transactions`, `bank_reconciliation_groups`, `bank_reconciliation_items` e `bank_reconciliation_reversals` (`V7__bank_reconciliation.sql`).
+6. **`FIX-06` (Performance & Paginação Keyset):**
+   - Todas as listagens paginadas aplicam o cursor decodificado por `BoundCursorCodec.decodeCursor` diretamente no `WHERE` SQL via comparação de tupla (`(name, id) > (?, ?)`, `(code, id) > (?, ?)`, `(due_date, id) > (?, ?)`, `(occurred_at, id) < (?, ?)`, `(booked_at, id) < (?, ?)`).
+   - Filtro de `status` (incluindo `OVERDUE` em `America/Manaus`) movido para o SQL e `getSummary()` reescrito com agregação SQL nativa (`SUM(...) FILTER (WHERE ...)`).
+7. **`FIX-07` (Hardening de Build, `Clock`, Jackson `JsonMapper` & Testes):**
+   - Remoção de `spring-boot-starter-data-jpa` / `spring.jpa.*`, adição de `@Bean Clock`, substituição de API depreciada do Jackson por `JsonMapper.builder()` (zero warnings em `-Xlint:deprecation`), `HexagonalArchitectureTest`, `IdempotencyExecutorTest`, `BankStatementParserTest` e `PostgreSqlSchemaAndRlsIntegrationTest` (Testcontainers PostgreSQL 16).
 
 ---
 
-## 2. Próximo Passo Imediato (`EPIC-05` — Tasks `CLZ-015` a `CLZ-017`)
+## 2. Próximo Passo Imediato (`EPIC-06` — Tasks `CLZ-018` e `CLZ-019`)
 
-- **`CLZ-015`:** Implementar o parser determinístico de extratos OFX 1.x/2.x e CSV (`BankStatementParser.java`) integrando com `BankMovementHashCalculator.java`.
-- **`CLZ-016`:** Implementar o serviço e controller de Contas Bancárias (`bank-accounts`), Importação Idempotente (`bank-statement-imports`) e Listagem de Movimentos (`bank-transactions`).
-- **`CLZ-017`:** Implementar o motor de sugestões determinísticas (score 0–100), conciliação `1:1` (`reconciliations/match`) e desfazer conciliação (`reconciliations/{id}/undo`).
+- **`CLZ-018`:** Implementar o Workspace Financeiro Completo em React 19 (`frontend/src/`) consumindo `/api/v1/financial-parties`, `/api/v1/financial-categories`, `/api/v1/cost-centers`, `/api/v1/financial-accounts`, `/api/v1/financial-records`, `/api/v1/financial-summary` e `/api/v1/financial-events`.
+- **`CLZ-019`:** Implementar o Workspace de Conciliação Bancária em React 19 consumindo `/api/v1/bank-accounts`, `/api/v1/bank-statement-imports`, `/api/v1/bank-transactions` e `/api/v1/reconciliations/*`.

@@ -36,32 +36,36 @@ import java.util.UUID;
 
 /**
  * Filtro de autenticação e resolução de contexto multi-tenant:
- * 1. Resolve a identidade autenticada via token de sessão persistida em user_sessions (Cookie/Bearer)
- *    ou cabeçalho de teste X-Clareza-Verified-User-Email quando explicitamente habilitado em perfil de teste;
+ * 1. Resolve a identidade autenticada via app.resolve_session_token(token_hash) (SECURITY DEFINER)
+ *    ou cabeçalhos de identidade verificada quando habilitado em perfil de teste;
  * 2. Valida X-Clareza-Tenant-Id, X-Clareza-Company-Id e X-Clareza-Branch-Id contra os vínculos ativos;
- * 3. Popula SecurityContextHolder e TenantContextHolder e garante limpeza no bloco finally.
+ * 3. Armazena IdentitySummary no request attribute para eliminar duplo round-trip em GET /api/v1/me (FIX-06);
+ * 4. Popula SecurityContextHolder e TenantContextHolder e garante limpeza no bloco finally.
  */
 @Component
 public class ClarezaAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String SESSION_COOKIE_NAME = "clareza_session";
     public static final String TEST_EMAIL_HEADER = "X-Clareza-Verified-User-Email";
+    public static final String OAI_EMAIL_HEADER = "oai-authenticated-user-email";
+    public static final String IDENTITY_SUMMARY_REQUEST_ATTR = "clareza.identitySummary";
 
     private final IdentityAccessDirectoryService directoryService;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
-    private final boolean allowTestEmailHeader;
+    private final boolean allowHeaderIdentityFallback;
 
     public ClarezaAuthenticationFilter(
             IdentityAccessDirectoryService directoryService,
             JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
-            @Value("${clareza.security.allow-test-email-header:false}") boolean allowTestEmailHeader
+            @Value("${clareza.security.allow-test-email-header:false}") boolean allowTestEmailHeader,
+            @Value("${clareza.security.allow-header-identity-fallback:false}") boolean allowHeaderFallback
     ) {
         this.directoryService = directoryService;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
-        this.allowTestEmailHeader = allowTestEmailHeader;
+        this.allowHeaderIdentityFallback = allowTestEmailHeader || allowHeaderFallback;
     }
 
     @Override
@@ -88,8 +92,15 @@ public class ClarezaAuthenticationFilter extends OncePerRequestFilter {
                         rows,
                         new ContextSelection(tenantId, companyId, branchId)
                 );
+                request.setAttribute(IDENTITY_SUMMARY_REQUEST_ATTR, summary);
+
+                boolean isMeEndpoint = "/api/v1/me".equals(request.getRequestURI());
                 String requestId = resolveRequestId(request);
-                AuthenticatedTenantContext tenantContext = directoryService.toAuthenticatedContext(summary, requestId);
+                AuthenticatedTenantContext tenantContext = directoryService.toAuthenticatedContext(
+                        summary,
+                        requestId,
+                        !isMeEndpoint
+                );
 
                 List<SimpleGrantedAuthority> authorities = tenantContext.permissions().stream()
                         .map(SimpleGrantedAuthority::new)
@@ -135,15 +146,7 @@ public class ClarezaAuthenticationFilter extends OncePerRequestFilter {
         if (sessionToken != null && !sessionToken.isBlank()) {
             String tokenHash = sha256Hex(sessionToken.trim());
             List<String> emails = jdbcTemplate.query(
-                    """
-                    SELECT u.email
-                      FROM user_sessions s
-                      JOIN users u ON u.id = s.user_id
-                     WHERE s.token_hash = ?
-                       AND s.revoked_at IS NULL
-                       AND s.expires_at > CURRENT_TIMESTAMP
-                       AND u.status = 'ACTIVE'
-                    """,
+                    "SELECT email FROM app.resolve_session_token(?)",
                     (rs, rowNum) -> rs.getString("email"),
                     tokenHash
             );
@@ -152,8 +155,11 @@ public class ClarezaAuthenticationFilter extends OncePerRequestFilter {
             }
         }
 
-        if (allowTestEmailHeader) {
+        if (allowHeaderIdentityFallback) {
             String testEmail = request.getHeader(TEST_EMAIL_HEADER);
+            if (testEmail == null || testEmail.isBlank()) {
+                testEmail = request.getHeader(OAI_EMAIL_HEADER);
+            }
             if (testEmail != null && !testEmail.isBlank()) {
                 return IdentityAccessDirectoryService.normalizeEmail(testEmail);
             }

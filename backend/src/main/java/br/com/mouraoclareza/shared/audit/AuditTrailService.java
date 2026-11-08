@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +21,7 @@ import java.util.UUID;
 
 /**
  * Serviço de trilha de auditoria imutável (append-only) com integrity_hash SHA-256.
- * A tabela audit_logs possui triggers PostgreSQL que bloqueiam UPDATE e DELETE.
+ * Alinhado 100% com o schema da tabela audit_logs em V1__init.sql (linhas 527-562).
  */
 @Component
 public class AuditTrailService {
@@ -28,33 +29,44 @@ public class AuditTrailService {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper canonicalMapper;
 
-    public AuditTrailService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public AuditTrailService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
-        this.canonicalMapper = objectMapper.copy()
+        this.canonicalMapper = JsonMapper.builder()
+                .findAndAddModules()
                 .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
-                .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+                .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
+                .build();
     }
 
     public UUID recordAuditLog(
             String action,
             String entityType,
-            String entityId,
+            UUID entityId,
             UUID branchId,
-            Object beforeState,
-            Object afterState
+            Object beforeData,
+            Object afterData
     ) {
         AuthenticatedTenantContext context = TenantContextHolder.getRequiredContext();
         UUID auditId = UUID.randomUUID();
-        String beforeJson = beforeState == null ? null : toJson(beforeState);
-        String afterJson = afterState == null ? null : toJson(afterState);
+        UUID effectiveBranchId = branchId != null ? branchId : context.activeBranchId();
+        String beforeJson = beforeData == null ? null : toJson(beforeData);
+        String afterJson = afterData == null ? null : toJson(afterData);
+
+        Map<String, Object> metadataMap = new LinkedHashMap<>();
+        metadataMap.put("requestId", context.requestId());
+        if (context.roleCode() != null) {
+            metadataMap.put("roleCode", context.roleCode());
+        }
+        String metadataJson = toJson(metadataMap);
+
         String integrityHash = computeIntegrityHash(
                 context.tenantId(),
                 context.activeCompanyId(),
-                branchId != null ? branchId : context.activeBranchId(),
+                effectiveBranchId,
                 context.userId(),
                 action,
                 entityType,
-                entityId,
+                entityId != null ? entityId.toString() : null,
                 beforeJson,
                 afterJson,
                 context.requestId()
@@ -63,23 +75,23 @@ public class AuditTrailService {
         jdbcTemplate.update(
                 """
                 INSERT INTO audit_logs (
-                    id, tenant_id, company_id, branch_id, actor_user_id, actor_role,
-                    action, entity_type, entity_id, before_state, after_state,
-                    request_id, integrity_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?)
+                    id, tenant_id, company_id, branch_id, actor_user_id, session_id,
+                    action, entity_type, entity_id, before_data, after_data,
+                    metadata, integrity_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?)
                 """,
                 auditId,
                 context.tenantId(),
                 context.activeCompanyId(),
-                branchId != null ? branchId : context.activeBranchId(),
+                effectiveBranchId,
                 context.userId(),
-                context.roleCode(),
+                null,
                 action,
                 entityType,
                 entityId,
                 beforeJson,
                 afterJson,
-                context.requestId(),
+                metadataJson,
                 integrityHash
         );
 

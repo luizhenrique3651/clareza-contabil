@@ -4,8 +4,10 @@ import br.com.mouraoclareza.financial.application.FinancialCatalogService;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CostCenterView;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreateCategoryRequest;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreateCostCenterRequest;
+import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreateFinancialAccountRequest;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CreatePartyRequest;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.CursorPageResponse;
+import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.FinancialAccountView;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.FinancialCategoryView;
 import br.com.mouraoclareza.financial.domain.FinancialCatalogModels.PartyView;
 import br.com.mouraoclareza.shared.idempotency.IdempotencyExecutor.IdempotentResult;
@@ -19,7 +21,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Controller REST para Catálogos Financeiros (/api/v1/financial-parties, /api/v1/financial-categories, /api/v1/cost-centers).
+ * Controller REST para Catálogos Financeiros
+ * (/api/v1/financial-parties, /api/v1/financial-categories, /api/v1/cost-centers, /api/v1/financial-accounts).
+ * Propaga o header Idempotency-Replayed conforme FIX-01.
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -46,7 +50,9 @@ public class FinancialCatalogsController {
             @RequestBody CreatePartyRequest request
     ) {
         IdempotentResult<PartyView> result = catalogService.createParty(idempotencyKey, request);
-        return ResponseEntity.status(result.status()).body(result.body());
+        return ResponseEntity.status(result.status())
+                .header("Idempotency-Replayed", Boolean.toString(result.replayed()))
+                .body(result.body());
     }
 
     @GetMapping("/financial-categories")
@@ -64,7 +70,9 @@ public class FinancialCatalogsController {
             @RequestBody CreateCategoryRequest request
     ) {
         IdempotentResult<FinancialCategoryView> result = catalogService.createCategory(idempotencyKey, request);
-        return ResponseEntity.status(result.status()).body(result.body());
+        return ResponseEntity.status(result.status())
+                .header("Idempotency-Replayed", Boolean.toString(result.replayed()))
+                .body(result.body());
     }
 
     @GetMapping("/cost-centers")
@@ -81,6 +89,27 @@ public class FinancialCatalogsController {
             @RequestBody CreateCostCenterRequest request
     ) {
         IdempotentResult<CostCenterView> result = catalogService.createCostCenter(idempotencyKey, request);
-        return ResponseEntity.status(result.status()).body(result.body());
+        return ResponseEntity.status(result.status())
+                .header("Idempotency-Replayed", Boolean.toString(result.replayed()))
+                .body(result.body());
+    }
+
+    @GetMapping("/financial-accounts")
+    public ResponseEntity<CursorPageResponse<FinancialAccountView>> listFinancialAccounts(
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "25") int limit
+    ) {
+        return ResponseEntity.ok(catalogService.listFinancialAccounts(cursor, limit));
+    }
+
+    @PostMapping("/financial-accounts")
+    public ResponseEntity<FinancialAccountView> createFinancialAccount(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody CreateFinancialAccountRequest request
+    ) {
+        IdempotentResult<FinancialAccountView> result = catalogService.createFinancialAccount(idempotencyKey, request);
+        return ResponseEntity.status(result.status())
+                .header("Idempotency-Replayed", Boolean.toString(result.replayed()))
+                .body(result.body());
     }
 }

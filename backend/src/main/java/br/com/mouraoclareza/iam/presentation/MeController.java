@@ -4,6 +4,7 @@ import br.com.mouraoclareza.iam.application.IdentityAccessDirectoryService;
 import br.com.mouraoclareza.iam.application.IdentityAccessDirectoryService.ContextSelection;
 import br.com.mouraoclareza.iam.domain.AccessRow;
 import br.com.mouraoclareza.iam.domain.IdentitySummary;
+import br.com.mouraoclareza.iam.security.ClarezaAuthenticationFilter;
 import br.com.mouraoclareza.shared.domain.DomainIds;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,8 @@ import java.util.UUID;
 
 /**
  * Endpoint de descoberta de identidade e escopo operacional autorizado (GET /api/v1/me).
+ * Reutiliza o IdentitySummary já resolvido pelo ClarezaAuthenticationFilter quando presente,
+ * eliminando o duplo round-trip ao PostgreSQL (FIX-03 / FIX-06).
  */
 @RestController
 @RequestMapping("/api/v1/me")
@@ -37,6 +40,11 @@ public class MeController {
             @RequestHeader(value = "X-Clareza-Branch-Id", required = false) String rawBranchId,
             HttpServletRequest request
     ) {
+        Object preResolved = request.getAttribute(ClarezaAuthenticationFilter.IDENTITY_SUMMARY_REQUEST_ATTR);
+        if (preResolved instanceof IdentitySummary summary) {
+            return ResponseEntity.ok(summary);
+        }
+
         String email = authentication != null ? authentication.getName() : null;
         UUID tenantId = parseOptionalHeaderUuid(rawTenantId, "X-Clareza-Tenant-Id");
         UUID companyId = parseOptionalHeaderUuid(rawCompanyId, "X-Clareza-Company-Id");

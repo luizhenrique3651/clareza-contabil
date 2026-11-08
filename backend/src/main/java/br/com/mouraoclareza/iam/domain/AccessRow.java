@@ -1,28 +1,27 @@
 package br.com.mouraoclareza.iam.domain;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
  * Linha retornada pela função SECURITY DEFINER app.resolve_identity_access(verified_email).
+ * Alinhada 100% com as 11 colunas definidas em V2__identity_bootstrap_and_branch_rls.sql
+ * e V8__user_sessions_and_auth_hardening.sql.
  */
 public record AccessRow(
-        UUID userId,
-        String userEmail,
-        String userName,
-        String userStatus,
-        UUID membershipId,
         UUID tenantId,
         String tenantName,
-        String tenantSlug,
-        String roleCode,
-        boolean tenantWideAccess,
+        UUID userId,
+        String displayName,
+        String email,
+        String scope,
         UUID companyId,
-        String companyLegalName,
-        String companyTradeName,
-        String companyTaxId,
+        String companyName,
         UUID branchId,
         String branchName,
-        String branchCode,
-        String branchTaxId
+        List<String> permissions
 ) {
+    public AccessRow {
+        permissions = permissions == null ? List.of() : List.copyOf(permissions);
+    }
 }

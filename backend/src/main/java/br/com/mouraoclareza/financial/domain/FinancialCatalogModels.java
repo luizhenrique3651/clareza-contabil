@@ -5,7 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Modelos de transferência e domínio dos Catálogos Financeiros (Participantes, Categorias e Centros de Custo).
+ * Modelos de transferência e domínio dos Catálogos Financeiros
+ * (Participantes/Counterparties, Categorias Financeiras, Centros de Custo e Contas Financeiras).
  */
 public final class FinancialCatalogModels {
 
@@ -17,6 +18,7 @@ public final class FinancialCatalogModels {
             UUID tenantId,
             UUID companyId,
             UUID branchId,
+            String code,
             String legalName,
             String tradeName,
             String documentType,
@@ -30,31 +32,48 @@ public final class FinancialCatalogModels {
 
     public record CreatePartyRequest(
             UUID branchId,
+            String code,
             String legalName,
             String tradeName,
             String documentNumber,
             String partyRole,
             String email
     ) {
+        public CreatePartyRequest(
+                UUID branchId,
+                String legalName,
+                String tradeName,
+                String documentNumber,
+                String partyRole,
+                String email
+        ) {
+            this(branchId, null, legalName, tradeName, documentNumber, partyRole, email);
+        }
     }
 
     public record FinancialCategoryView(
             UUID id,
             UUID tenantId,
             UUID companyId,
+            UUID branchId,
             String code,
             String name,
             String kind,
+            String direction,
             String status,
             Instant createdAt
     ) {
     }
 
     public record CreateCategoryRequest(
+            UUID branchId,
             String code,
             String name,
             String kind
     ) {
+        public CreateCategoryRequest(String code, String name, String kind) {
+            this(null, code, name, kind);
+        }
     }
 
     public record CostCenterView(
@@ -73,6 +92,29 @@ public final class FinancialCatalogModels {
             UUID branchId,
             String code,
             String name
+    ) {
+    }
+
+    public record FinancialAccountView(
+            UUID id,
+            UUID tenantId,
+            UUID companyId,
+            UUID branchId,
+            String code,
+            String name,
+            String type,
+            String currencyCode,
+            String status,
+            Instant createdAt
+    ) {
+    }
+
+    public record CreateFinancialAccountRequest(
+            UUID branchId,
+            String code,
+            String name,
+            String type,
+            String currencyCode
     ) {
     }
 

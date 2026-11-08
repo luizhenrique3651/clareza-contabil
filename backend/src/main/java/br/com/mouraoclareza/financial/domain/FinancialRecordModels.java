@@ -9,8 +9,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Modelos de transferência e domínio para Títulos Financeiros (AP/AR), Baixas, Sumário e Eventos Imutáveis.
- * Paridade integral com legacy/server/financial-records.mjs e legacy/server/financial-events.mjs.
+ * Modelos de transferência e domínio para Títulos Financeiros (payables / receivables),
+ * Baixas (payments / receipts), Estornos (payment_reversals / receipt_reversals),
+ * Sumário Executivo e Eventos Imutáveis.
+ * Paridade integral com V1__init.sql, V5__financial_operations.sql, V6__phase_two_hardening.sql,
+ * legacy/server/financial-records.mjs e legacy/server/financial-events.mjs.
  */
 public final class FinancialRecordModels {
 
@@ -62,8 +65,45 @@ public final class FinancialRecordModels {
             String principalAmount,
             String discountAmount,
             String interestAmount,
-            String fineAmount
+            String fineAmount,
+            String counterpartyName,
+            String currencyCode
     ) {
+        public CreateFinancialRecordRequest(
+                UUID branchId,
+                UUID partyId,
+                UUID categoryId,
+                UUID costCenterId,
+                String recordType,
+                String description,
+                String documentNumber,
+                LocalDate issueDate,
+                LocalDate competenceDate,
+                LocalDate dueDate,
+                String principalAmount,
+                String discountAmount,
+                String interestAmount,
+                String fineAmount
+        ) {
+            this(
+                    branchId,
+                    partyId,
+                    categoryId,
+                    costCenterId,
+                    recordType,
+                    description,
+                    documentNumber,
+                    issueDate,
+                    competenceDate,
+                    dueDate,
+                    principalAmount,
+                    discountAmount,
+                    interestAmount,
+                    fineAmount,
+                    null,
+                    "BRL"
+            );
+        }
     }
 
     public record FinancialSettlementView(
@@ -83,7 +123,26 @@ public final class FinancialRecordModels {
             String amount,
             String paymentMethod,
             String bankReference,
-            String notes
+            String notes,
+            UUID financialAccountId,
+            String interestAmount,
+            String fineAmount,
+            String discountAmount
+    ) {
+        public CreateSettlementRequest(
+                LocalDate settlementDate,
+                String amount,
+                String paymentMethod,
+                String bankReference,
+                String notes
+        ) {
+            this(settlementDate, amount, paymentMethod, bankReference, notes, null, null, null, null);
+        }
+    }
+
+    public record ReverseSettlementRequest(
+            String reason,
+            Instant occurredAt
     ) {
     }
 

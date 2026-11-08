@@ -894,3 +894,30 @@ Para iniciarmos a execução da **Sprint 0 (`CLZ-001` e `CLZ-002`)** imediatamen
    - Prefere **Maven** (`pom.xml` — padrão corporativo mais estável para execução por agentes como Claude Code/Antigravity) ou **Gradle** (`build.gradle.kts`)?
 3. **Provedor de Autenticação Alvo (`EPIC-03`):**
    - Devemos configurar o Spring Security 6 com **JWT Stateless + Login Local/OIDC configurável (Keycloak / Auth0 / Cognito)** mantendo um perfil `test` compatível com os headers dos testes de integração existentes?
+
+---
+
+## Parte 8 — Diretrizes Inegociáveis de Alinhamento SQL Estrito (`V1`–`V8`), Triggers de Projeção e Performance Keyset (`FIX-01` a `FIX-07`)
+
+> [!IMPORTANT]
+> Após revisão sênior de engenharia ([`docs/PLANO_CORRECAO_BACKEND_ALINHAMENTO_SQL_PERFORMANCE.md`](./PLANO_CORRECAO_BACKEND_ALINHAMENTO_SQL_PERFORMANCE.md)), todo desenvolvimento presente e futuro no backend Java 21 deve obedecer estritamente às 6 diretrizes abaixo para impedir deriva de schema ou gargalos de memória:
+
+1. **Proibição Absoluta de Tabelas Paralelas (`FIX-04`, `FIX-05`):**
+   - Nenhuma classe Java pode referenciar nomes de tabelas fora das migrations Flyway (`parties`, `financial_records`, `financial_settlements`, `financial_events`, `bank_accounts`, `bank_statement_imports`, `bank_reconciliations`). O teste arquitetural [`HexagonalArchitectureTest.java`](../backend/src/test/java/br/com/mouraoclareza/architecture/HexagonalArchitectureTest.java) falha a build caso qualquer uma dessas strings apareça em `FROM`/`INTO`/`UPDATE`/`JOIN`.
+   - **Mapeamento Canônico de Tabelas (`V1` a `V8`):**
+     - **Idempotência e Auditoria (`V1`, `V3`):** `idempotency_records` (`id, tenant_id, user_id, operation, key, request_hash, resource_type, resource_id, response_status, response_body, expires_at`) e `audit_logs` (`id, tenant_id, company_id, branch_id, actor_user_id, session_id, action, entity_type, entity_id [uuid], before_data, after_data, metadata, integrity_hash`).
+     - **Catálogos (`V5`, `V6`):** `counterparties`, `financial_categories`, `cost_centers`, `financial_accounts`.
+     - **Títulos e Eventos Financeiros (`V1`, `V5`, `V6`):** `payables`, `receivables`, `payments`, `payment_reversals`, `receipts`, `receipt_reversals`.
+     - **Importação e Conciliação Bancária (`V7`):** `bank_imports`, `bank_transactions`, `bank_reconciliation_groups`, `bank_reconciliation_items`, `bank_reconciliation_reversals`.
+     - **Contabilidade e Governança (`V1` — para `EPIC-07`):** `accounts`, `journal_entries`, `journal_lines`, `risks`, `action_plans`, `pending_items`, `glossary_terms`.
+2. **Projeções Financeiras Governadas por Triggers (`V6` linhas 671–720):**
+   - As triggers `payables_projection_guard` e `receivables_projection_guard` bloqueiam `UPDATE` direto em `amount`, `outstanding_amount`, `status` e `paid_at`/`received_at` quando `pg_trigger_depth() <= 1`.
+   - Toda baixa ou estorno deve apenas inserir em `payments`, `payment_reversals`, `receipts` ou `receipt_reversals`, deixando as triggers `AFTER INSERT` (`payments_refresh_projection` / `receipts_refresh_projection`) atualizarem a projeção no PostgreSQL.
+3. **Isolamento RLS Estrito para Membros de Escopo `BRANCH` (`FIX-03`):**
+   - Quando um usuário autenticado possui apenas escopo `BRANCH` na empresa ativa, `allowedCompanyIds` deve ser `List.of()` (vazio) para que `app.can_access_company(company_id)` não conceda acesso às demais filiais da empresa.
+4. **Paginação Keyset Real no SQL (`FIX-06`):**
+   - Todo método paginado deve aplicar o resultado de `BoundCursorCodec.decodeCursor(cursor, scope)` diretamente na cláusula `WHERE` via comparação de tupla PostgreSQL (`(col, id) > (?, ?)` ou `(col, id) < (?, ?)`).
+5. **Filtros Temporais e Agregações Executados no Banco (`FIX-06`):**
+   - É proibido filtrar `status` (incluindo `OVERDUE` em `America/Manaus`) em memória Java após `LIMIT` ou calcular sumários financeiros/contábeis iterando sobre coleções na JVM. Usar sempre predicados SQL e `COALESCE(SUM(...) FILTER (WHERE ...), 0.0000)`.
+6. **Validação Estrita de Idempotência e Header `Idempotency-Replayed` (`FIX-01`):**
+   - Todo `POST` mutável valida `Idempotency-Key` contra `^[A-Za-z0-9._:-]{8,128}$` e retorna o header `Idempotency-Replayed: true|false`.

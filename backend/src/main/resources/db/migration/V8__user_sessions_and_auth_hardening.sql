@@ -44,6 +44,44 @@ CREATE POLICY user_sessions_isolation ON user_sessions TO PUBLIC
 GRANT SELECT, INSERT, UPDATE (revoked_at) ON user_sessions TO clarity_app;
 REVOKE DELETE ON user_sessions FROM clarity_app;
 
+CREATE OR REPLACE FUNCTION app.resolve_session_token(raw_token_hash text)
+RETURNS TABLE (
+  session_id uuid,
+  tenant_id uuid,
+  user_id uuid,
+  email text,
+  authentication_source text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, app
+AS $function$
+  SELECT
+    s.id AS session_id,
+    s.tenant_id,
+    s.user_id,
+    u.email::text,
+    s.authentication_source::text
+  FROM public.user_sessions s
+  JOIN public.users u
+    ON u.tenant_id = s.tenant_id
+   AND u.id = s.user_id
+  JOIN public.tenants t
+    ON t.id = s.tenant_id
+  WHERE s.token_hash = lower(btrim(raw_token_hash))
+    AND s.revoked_at IS NULL
+    AND s.expires_at > CURRENT_TIMESTAMP
+    AND u.is_active = true
+    AND u.deleted_at IS NULL
+    AND t.status = 'ACTIVE'
+    AND t.deleted_at IS NULL
+  LIMIT 1;
+$function$;
+
+REVOKE ALL ON FUNCTION app.resolve_session_token(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.resolve_session_token(text) TO clarity_app;
+
 CREATE OR REPLACE FUNCTION app.resolve_identity_access(
   verified_email text,
   auth_provider text
