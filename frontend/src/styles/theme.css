@@ -1,0 +1,56 @@
+:root {
+  --color-navy-950: #0b1727;
+  --color-navy-900: #112239;
+  --color-navy-800: #1b3353;
+  --color-gold-600: #b0893e;
+  --color-gold-500: #c5a059;
+  --color-gold-400: #d8b878;
+  --color-ivory-50: #fcfaf5;
+  --color-ivory-100: #f7f4ec;
+  --color-ivory-200: #ece6d8;
+  --color-slate-700: #334155;
+  --color-slate-500: #64748b;
+  --color-emerald-700: #15803d;
+  --color-amber-700: #b45309;
+  --color-crimson-700: #b91c1c;
+
+  --font-sans: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: "Newsreader", Georgia, serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-ivory-100);
+  color: var(--color-navy-900);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+.serif-heading {
+  font-family: var(--font-serif);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold-500);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

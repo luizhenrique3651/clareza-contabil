@@ -1,0 +1,10 @@
+CLAREZA CONTABIL - RESUMO DA INSPECAO DE SEGREDOS
+Data: 2026-10-10
+
+Arquivos de projeto inspecionados: 115
+Achados de alta confianca (chaves privadas, tokens de provedores): 0
+URLs com credencial embutida: 3
+Classificacao das 3 URLs: exemplos locais em .env.example e fallback de prisma.config.ts; host 127.0.0.1.
+
+Nenhum valor de credencial e reproduzido neste relatorio.
+A verificacao local nao substitui secret scanning corporativo no repositorio de destino.

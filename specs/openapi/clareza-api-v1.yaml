@@ -1,0 +1,424 @@
+openapi: 3.1.0
+info:
+  title: Mourão Clareza Contábil e Financeira API
+  version: 1.0.0
+  description: >
+    Contrato formal Spec-Driven Development (SDD) da API v1 do Mourão Clareza Contábil e Financeira.
+    Todas as operações de domínio exigem sessão verificada, isolamento multi-tenant/empresa/unidade (RLS)
+    e precisão decimal exata (NUMERIC(19,4)) representada como string canônica.
+servers:
+  - url: /api/v1
+    description: API interna versionada v1
+
+components:
+  parameters:
+    CompanyIdHeader:
+      name: x-clareza-company-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BranchIdHeader:
+      name: x-clareza-branch-id
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9._:-]{8,128}$"
+
+  schemas:
+    ProblemDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - code
+        - requestId
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://clareza.example/problems/validation_error
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationErrorItem"
+
+    ValidationErrorItem:
+      type: object
+      required:
+        - field
+        - code
+        - message
+      properties:
+        field:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+
+    IdentityEnvelope:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: object
+          required:
+            - email
+            - displayName
+            - tenants
+          properties:
+            email:
+              type: string
+              format: email
+            displayName:
+              type: string
+            tenants:
+              type: array
+              items:
+                type: object
+                required: [id, name, companies]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  companies:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, scopes, permissions, branches]
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        scopes:
+                          type: array
+                          items:
+                            type: string
+                            enum: [TENANT, COMPANY, BRANCH]
+                        permissions:
+                          type: array
+                          items:
+                            type: string
+                        branches:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, name, permissions]
+                            properties:
+                              id:
+                                type: string
+                                format: uuid
+                              name:
+                                type: string
+                              permissions:
+                                type: array
+                                items:
+                                  type: string
+        meta:
+          type: object
+          required: [requestId]
+          properties:
+            requestId:
+              type: string
+              format: uuid
+
+    ReconciliationCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - financialAccountId
+        - bankTransactionIds
+      properties:
+        financialAccountId:
+          type: string
+          format: uuid
+        reconciledAt:
+          type: string
+          format: date-time
+        note:
+          type: string
+          minLength: 2
+          maxLength: 500
+        bankTransactionIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        paymentIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        receiptIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ReconciliationReversalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - groupId
+        - reason
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 4
+          maxLength: 500
+        occurredAt:
+          type: string
+          format: date-time
+
+paths:
+  /me:
+    get:
+      operationId: getAuthenticatedIdentity
+      summary: Resolve a identidade autenticada e seu diretório autorizado de tenants, empresas e filiais
+      responses:
+        "200":
+          description: Identidade e contexto resolvidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityEnvelope"
+        "401":
+          description: Identidade ausente ou sessão inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: Identidade sem vínculo autorizado (MEMBERSHIP_REQUIRED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          description: Banco de dados indisponível
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /financial/catalogs:
+    get:
+      operationId: listFinancialCatalogs
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Catálogos financeiros ativos no escopo
+    post:
+      operationId: createFinancialCatalog
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Cadastro financeiro criado
+
+  /payables:
+    get:
+      operationId: listPayables
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Lista paginada de contas a pagar
+    post:
+      operationId: createPayable
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Conta a pagar criada
+
+  /payables/settlements:
+    post:
+      operationId: createPayableSettlement
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Baixa parcial ou total de conta a pagar registrada
+
+  /payables/reversals:
+    post:
+      operationId: createPayableReversal
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Estorno append-only de baixa registrado
+
+  /payables/history:
+    get:
+      operationId: getPayableHistory
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Timeline cronológica e auditoria de projeção do título
+
+  /receivables:
+    get:
+      operationId: listReceivables
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Lista paginada de contas a receber
+    post:
+      operationId: createReceivable
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Conta a receber criada
+
+  /receivables/settlements:
+    post:
+      operationId: createReceivableSettlement
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Recebimento parcial ou total registrado
+
+  /receivables/reversals:
+    post:
+      operationId: createReceivableReversal
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Estorno append-only de recebimento registrado
+
+  /receivables/history:
+    get:
+      operationId: getReceivableHistory
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Timeline cronológica e auditoria de projeção do título
+
+  /bank/imports:
+    get:
+      operationId: listBankImports
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Lotes de importação bancária paginados
+    post:
+      operationId: createBankImport
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Arquivo CSV/OFX importado atomicamente
+
+  /bank/transactions:
+    get:
+      operationId: listBankTransactions
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Transações bancárias importadas paginadas
+
+  /bank/reconciliations:
+    get:
+      operationId: listBankReconciliations
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+      responses:
+        "200":
+          description: Grupos de conciliação bancária paginados
+    post:
+      operationId: createBankReconciliation
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconciliationCreateRequest"
+      responses:
+        "201":
+          description: Grupo de conciliação (1:1, 1:N ou N:1) criado com reservas exclusivas
+
+  /bank/reconciliations/reversals:
+    post:
+      operationId: reverseBankReconciliation
+      parameters:
+        - $ref: "#/components/parameters/CompanyIdHeader"
+        - $ref: "#/components/parameters/BranchIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconciliationReversalRequest"
+      responses:
+        "201":
+          description: Reversão append-only registrada e reservas liberadas

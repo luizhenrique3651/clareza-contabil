@@ -1,0 +1,1125 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+
+  @@map("tenant_status")
+}
+
+enum CompanyStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+
+  @@map("company_status")
+}
+
+enum MembershipScope {
+  TENANT
+  COMPANY
+  BRANCH
+
+  @@map("membership_scope")
+}
+
+enum FinancialStatus {
+  OPEN
+  PARTIAL
+  SETTLED
+  OVERDUE
+  CANCELLED
+
+  @@map("financial_status")
+}
+
+enum CounterpartyKind {
+  SUPPLIER
+  CUSTOMER
+  BOTH
+
+  @@map("counterparty_kind")
+}
+
+enum FinancialDirection {
+  PAYABLE
+  RECEIVABLE
+  BOTH
+
+  @@map("financial_direction")
+}
+
+enum FinancialAccountType {
+  CASH
+  CHECKING
+  SAVINGS
+  PAYMENT
+  OTHER
+
+  @@map("financial_account_type")
+}
+
+enum BankImportFormat {
+  CSV
+  OFX
+
+  @@map("bank_import_format")
+}
+
+enum ReconciliationParticipantKind {
+  BANK_TRANSACTION
+  PAYMENT
+  RECEIPT
+
+  @@map("reconciliation_participant_kind")
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  REVERSED
+
+  @@map("journal_entry_status")
+}
+
+enum GlossaryCategory {
+  ACCOUNTING
+  FINANCIAL
+  FISCAL
+  TAX
+  LABOR
+  PAYROLL
+  CONTROLLERSHIP
+  AUDIT
+  MANAGEMENT
+  INDICATORS
+
+  @@map("glossary_category")
+}
+
+enum Priority {
+  INFORMATIONAL
+  ATTENTION
+  IMPORTANT
+  CRITICAL
+
+  @@map("priority")
+}
+
+enum WorkStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  RESOLVED
+  CANCELLED
+
+  @@map("work_status")
+}
+
+enum RiskLevel {
+  VERY_LOW
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+
+  @@map("risk_level")
+}
+
+enum RiskStatus {
+  IDENTIFIED
+  UNDER_ANALYSIS
+  TREATMENT_PLANNED
+  IN_TREATMENT
+  MONITORING
+  MITIGATED
+  ACCEPTED
+  CLOSED
+
+  @@map("risk_status")
+}
+
+enum ActionPlanStatus {
+  PLANNED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+
+  @@map("action_plan_status")
+}
+
+model Tenant {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String       @db.VarChar(160)
+  slug      String       @unique(map: "tenants_slug_key") @db.VarChar(80)
+  status    TenantStatus @default(ACTIVE)
+  settings  Json         @default("{}")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime?    @map("deleted_at") @db.Timestamptz(6)
+
+  companies           Company[]
+  branches            Branch[]
+  users               User[]
+  authIdentities      AuthIdentity[]
+  memberships         Membership[]
+  roles               Role[]
+  permissions         Permission[]
+  rolePermissions     RolePermission[]
+  payables            Payable[]
+  receivables         Receivable[]
+  counterparties      Counterparty[]
+  financialCategories FinancialCategory[]
+  costCenters         CostCenter[]
+  financialAccounts   FinancialAccount[]
+  payments            Payment[]
+  paymentReversals    PaymentReversal[]
+  receipts            Receipt[]
+  receiptReversals    ReceiptReversal[]
+  bankImports         BankImport[]
+  bankTransactions    BankTransaction[]
+  reconciliationGroups BankReconciliationGroup[]
+  reconciliationItems BankReconciliationItem[]
+  reconciliationReversals BankReconciliationReversal[]
+  journalEntries      JournalEntry[]
+  journalLines        JournalEntryLine[]
+  glossaryTerms       GlossaryTerm[]
+  pendingItems        PendingItem[]
+  risks               Risk[]
+  actionPlans         ActionPlan[]
+  auditLogs           AuditLog[]
+  idempotencyRecords  IdempotencyRecord[]
+
+  @@map("tenants")
+}
+
+model Company {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  legalName    String        @map("legal_name") @db.VarChar(180)
+  tradeName    String?       @map("trade_name") @db.VarChar(180)
+  taxId        String        @map("tax_id") @db.VarChar(24)
+  countryCode  String        @default("BR") @map("country_code") @db.Char(2)
+  currencyCode String        @default("BRL") @map("currency_code") @db.Char(3)
+  timezone     String        @default("America/Sao_Paulo") @db.VarChar(80)
+  status       CompanyStatus @default(ACTIVE)
+  settings     Json          @default("{}")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "companies_tenant_id_fk")
+  branches            Branch[]
+  memberships         Membership[]
+  payables            Payable[]
+  receivables         Receivable[]
+  counterparties      Counterparty[]
+  financialCategories FinancialCategory[]
+  costCenters         CostCenter[]
+  financialAccounts   FinancialAccount[]
+  payments            Payment[]
+  paymentReversals    PaymentReversal[]
+  receipts            Receipt[]
+  receiptReversals    ReceiptReversal[]
+  bankImports         BankImport[]
+  bankTransactions    BankTransaction[]
+  reconciliationGroups BankReconciliationGroup[]
+  reconciliationItems BankReconciliationItem[]
+  reconciliationReversals BankReconciliationReversal[]
+  journalEntries      JournalEntry[]
+  journalLines        JournalEntryLine[]
+  pendingItems        PendingItem[]
+  risks               Risk[]
+  actionPlans         ActionPlan[]
+  auditLogs           AuditLog[]
+
+  @@unique([tenantId, id], map: "companies_tenant_id_id_key")
+  @@unique([tenantId, taxId], map: "companies_tenant_tax_id_key")
+  @@index([tenantId, status], map: "companies_tenant_status_idx")
+  @@map("companies")
+}
+
+model Branch {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String        @map("tenant_id") @db.Uuid
+  companyId String        @map("company_id") @db.Uuid
+  code      String        @db.VarChar(40)
+  name      String        @db.VarChar(160)
+  taxId     String?       @map("tax_id") @db.VarChar(24)
+  status    CompanyStatus @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "branches_tenant_id_fk")
+  company             Company             @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "branches_company_fk")
+  memberships         Membership[]
+  payables            Payable[]
+  receivables         Receivable[]
+  counterparties      Counterparty[]
+  financialCategories FinancialCategory[]
+  costCenters         CostCenter[]
+  financialAccounts   FinancialAccount[]
+  payments            Payment[]
+  paymentReversals    PaymentReversal[]
+  receipts            Receipt[]
+  receiptReversals    ReceiptReversal[]
+  bankImports         BankImport[]
+  bankTransactions    BankTransaction[]
+  reconciliationGroups BankReconciliationGroup[]
+  reconciliationReversals BankReconciliationReversal[]
+  journalEntries      JournalEntry[]
+  pendingItems        PendingItem[]
+  risks               Risk[]
+  actionPlans         ActionPlan[]
+  auditLogs           AuditLog[]
+
+  @@unique([tenantId, id], map: "branches_tenant_id_id_key")
+  @@unique([tenantId, companyId, id], map: "branches_tenant_company_id_id_key")
+  @@unique([tenantId, companyId, code], map: "branches_tenant_company_code_key")
+  @@index([tenantId, companyId, status], map: "branches_tenant_company_status_idx")
+  @@map("branches")
+}
+
+model User {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  email            String    @db.VarChar(254)
+  displayName      String    @map("display_name") @db.VarChar(160)
+  passwordHash     String    @map("password_hash") @db.VarChar(255)
+  explanationLevel String    @default("ESSENTIAL") @map("explanation_level") @db.VarChar(20)
+  locale           String    @default("pt-BR") @db.VarChar(16)
+  isActive         Boolean   @default(true) @map("is_active")
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  tenant                     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "users_tenant_id_fk")
+  authIdentities             AuthIdentity[]
+  memberships                Membership[]
+  createdPayables            Payable[]           @relation("PayableCreatedBy")
+  updatedPayables            Payable[]           @relation("PayableUpdatedBy")
+  createdReceivables         Receivable[]        @relation("ReceivableCreatedBy")
+  updatedReceivables         Receivable[]        @relation("ReceivableUpdatedBy")
+  createdCounterparties      Counterparty[]      @relation("CounterpartyCreatedBy")
+  createdFinancialCategories FinancialCategory[] @relation("FinancialCategoryCreatedBy")
+  createdCostCenters         CostCenter[]        @relation("CostCenterCreatedBy")
+  createdFinancialAccounts   FinancialAccount[]  @relation("FinancialAccountCreatedBy")
+  createdPayments            Payment[]           @relation("PaymentCreatedBy")
+  createdPaymentReversals    PaymentReversal[]   @relation("PaymentReversalCreatedBy")
+  createdReceipts            Receipt[]           @relation("ReceiptCreatedBy")
+  createdReceiptReversals    ReceiptReversal[]   @relation("ReceiptReversalCreatedBy")
+  createdBankImports         BankImport[]        @relation("BankImportCreatedBy")
+  createdReconciliationGroups BankReconciliationGroup[] @relation("BankReconciliationCreatedBy")
+  createdReconciliationReversals BankReconciliationReversal[] @relation("BankReconciliationReversalCreatedBy")
+  createdJournalEntries      JournalEntry[]      @relation("JournalEntryCreatedBy")
+  updatedJournalEntries      JournalEntry[]      @relation("JournalEntryUpdatedBy")
+  assignedPendingItems       PendingItem[]       @relation("PendingResponsible")
+  ownedRisks                 Risk[]              @relation("RiskOwner")
+  ownedActionPlans           ActionPlan[]        @relation("ActionPlanOwner")
+  auditEvents                AuditLog[]          @relation("AuditActor")
+  idempotencyRecords         IdempotencyRecord[]
+
+  @@unique([tenantId, id], map: "users_tenant_id_id_key")
+  @@unique([tenantId, email], map: "users_tenant_email_key")
+  @@index([tenantId, isActive], map: "users_tenant_active_idx")
+  @@map("users")
+}
+
+model AuthIdentity {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  provider   String    @db.VarChar(40)
+  subject    String    @db.VarChar(254)
+  email      String    @db.VarChar(254)
+  isActive   Boolean   @default(true) @map("is_active")
+  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "auth_identities_tenant_fk")
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "auth_identities_user_fk")
+
+  @@unique([provider, subject, tenantId], map: "auth_identities_provider_subject_tenant_key")
+  @@unique([tenantId, userId, provider], map: "auth_identities_user_provider_key")
+  @@index([provider, email, isActive], map: "auth_identities_email_active_idx")
+  @@map("auth_identities")
+}
+
+model Role {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  code        String   @db.VarChar(80)
+  name        String   @db.VarChar(120)
+  description String?  @db.VarChar(500)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "roles_tenant_id_fk")
+  memberships     Membership[]
+  rolePermissions RolePermission[]
+
+  @@unique([tenantId, id], map: "roles_tenant_id_id_key")
+  @@unique([tenantId, code], map: "roles_tenant_code_key")
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  code        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "permissions_tenant_id_fk")
+  rolePermissions RolePermission[]
+
+  @@unique([tenantId, id], map: "permissions_tenant_id_id_key")
+  @@unique([tenantId, code], map: "permissions_tenant_code_key")
+  @@map("permissions")
+}
+
+model RolePermission {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "role_permissions_tenant_id_fk")
+  role       Role       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "role_permissions_role_fk")
+  permission Permission @relation(fields: [tenantId, permissionId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "role_permissions_permission_fk")
+
+  @@id([tenantId, roleId, permissionId], map: "role_permissions_pkey")
+  @@index([tenantId, permissionId], map: "role_permissions_permission_idx")
+  @@map("role_permissions")
+}
+
+model Membership {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String          @map("tenant_id") @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  roleId    String          @map("role_id") @db.Uuid
+  scope     MembershipScope
+  companyId String?         @map("company_id") @db.Uuid
+  branchId  String?         @map("branch_id") @db.Uuid
+  isActive  Boolean         @default(true) @map("is_active")
+  startsAt  DateTime?       @map("starts_at") @db.Timestamptz(6)
+  endsAt    DateTime?       @map("ends_at") @db.Timestamptz(6)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "memberships_tenant_id_fk")
+  user    User     @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "memberships_user_fk")
+  role    Role     @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "memberships_role_fk")
+  company Company? @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "memberships_company_fk")
+  branch  Branch?  @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Cascade, onUpdate: NoAction, map: "memberships_branch_fk")
+
+  @@unique([tenantId, id], map: "memberships_tenant_id_id_key")
+  @@index([tenantId, userId, isActive], map: "memberships_user_active_idx")
+  @@index([tenantId, companyId, branchId], map: "memberships_scope_idx")
+  @@map("memberships")
+}
+
+model Payable {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  companyId         String          @map("company_id") @db.Uuid
+  branchId          String?         @map("branch_id") @db.Uuid
+  counterpartyId    String?         @map("counterparty_id") @db.Uuid
+  categoryId        String?         @map("category_id") @db.Uuid
+  costCenterId      String?         @map("cost_center_id") @db.Uuid
+  counterpartyName  String          @map("counterparty_name") @db.VarChar(180)
+  description       String          @db.VarChar(500)
+  documentNumber    String?         @map("document_number") @db.VarChar(80)
+  issueDate         DateTime?       @map("issue_date") @db.Date
+  dueDate           DateTime        @map("due_date") @db.Date
+  amount            Decimal         @db.Decimal(19, 4)
+  outstandingAmount Decimal         @map("outstanding_amount") @db.Decimal(19, 4)
+  currencyCode      String          @default("BRL") @map("currency_code") @db.Char(3)
+  status            FinancialStatus @default(OPEN)
+  paidAt            DateTime?       @map("paid_at") @db.Timestamptz(6)
+  createdById       String          @map("created_by_id") @db.Uuid
+  updatedById       String?         @map("updated_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?       @map("deleted_at") @db.Timestamptz(6)
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "payables_tenant_id_fk")
+  company      Company            @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "payables_company_fk")
+  branch       Branch?            @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payables_branch_fk")
+  counterparty Counterparty?      @relation(fields: [tenantId, companyId, counterpartyId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payables_counterparty_fk")
+  category     FinancialCategory? @relation(fields: [tenantId, companyId, categoryId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payables_category_fk")
+  costCenter   CostCenter?        @relation(fields: [tenantId, companyId, costCenterId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payables_cost_center_fk")
+  createdBy    User               @relation("PayableCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "payables_created_by_fk")
+  updatedBy    User?              @relation("PayableUpdatedBy", fields: [tenantId, updatedById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "payables_updated_by_fk")
+  payments     Payment[]
+
+  @@unique([tenantId, companyId, id], map: "payables_tenant_company_id_key")
+  @@index([tenantId, companyId, status, dueDate], map: "payables_status_due_idx")
+  @@index([tenantId, companyId, counterpartyName], map: "payables_counterparty_idx")
+  @@index([tenantId, companyId, counterpartyId, categoryId, costCenterId], map: "payables_catalog_idx")
+  @@map("payables")
+}
+
+model Receivable {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  companyId         String          @map("company_id") @db.Uuid
+  branchId          String?         @map("branch_id") @db.Uuid
+  counterpartyId    String?         @map("counterparty_id") @db.Uuid
+  categoryId        String?         @map("category_id") @db.Uuid
+  costCenterId      String?         @map("cost_center_id") @db.Uuid
+  counterpartyName  String          @map("counterparty_name") @db.VarChar(180)
+  description       String          @db.VarChar(500)
+  documentNumber    String?         @map("document_number") @db.VarChar(80)
+  issueDate         DateTime?       @map("issue_date") @db.Date
+  dueDate           DateTime        @map("due_date") @db.Date
+  amount            Decimal         @db.Decimal(19, 4)
+  outstandingAmount Decimal         @map("outstanding_amount") @db.Decimal(19, 4)
+  currencyCode      String          @default("BRL") @map("currency_code") @db.Char(3)
+  status            FinancialStatus @default(OPEN)
+  receivedAt        DateTime?       @map("received_at") @db.Timestamptz(6)
+  createdById       String          @map("created_by_id") @db.Uuid
+  updatedById       String?         @map("updated_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?       @map("deleted_at") @db.Timestamptz(6)
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_tenant_id_fk")
+  company      Company            @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_company_fk")
+  branch       Branch?            @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_branch_fk")
+  counterparty Counterparty?      @relation(fields: [tenantId, companyId, counterpartyId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_counterparty_fk")
+  category     FinancialCategory? @relation(fields: [tenantId, companyId, categoryId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_category_fk")
+  costCenter   CostCenter?        @relation(fields: [tenantId, companyId, costCenterId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_cost_center_fk")
+  createdBy    User               @relation("ReceivableCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_created_by_fk")
+  updatedBy    User?              @relation("ReceivableUpdatedBy", fields: [tenantId, updatedById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "receivables_updated_by_fk")
+  receipts     Receipt[]
+
+  @@unique([tenantId, companyId, id], map: "receivables_tenant_company_id_key")
+  @@index([tenantId, companyId, status, dueDate], map: "receivables_status_due_idx")
+  @@index([tenantId, companyId, counterpartyName], map: "receivables_counterparty_idx")
+  @@index([tenantId, companyId, counterpartyId, categoryId, costCenterId], map: "receivables_catalog_idx")
+  @@map("receivables")
+}
+
+model Counterparty {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  companyId   String           @map("company_id") @db.Uuid
+  branchId    String?          @map("branch_id") @db.Uuid
+  code        String           @db.VarChar(40)
+  name        String           @db.VarChar(180)
+  taxId       String?          @map("tax_id") @db.VarChar(24)
+  kind        CounterpartyKind @default(BOTH)
+  isActive    Boolean          @default(true) @map("is_active")
+  createdById String           @map("created_by_id") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(6)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "counterparties_tenant_fk")
+  company     Company      @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "counterparties_company_fk")
+  branch      Branch?      @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "counterparties_branch_fk")
+  createdBy   User         @relation("CounterpartyCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "counterparties_created_by_fk")
+  payables    Payable[]
+  receivables Receivable[]
+
+  @@unique([tenantId, companyId, id], map: "counterparties_tenant_company_id_key")
+  @@unique([tenantId, companyId, code], map: "counterparties_tenant_company_code_key")
+  @@index([tenantId, companyId, name], map: "counterparties_name_idx")
+  @@map("counterparties")
+}
+
+model FinancialCategory {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String             @map("tenant_id") @db.Uuid
+  companyId   String             @map("company_id") @db.Uuid
+  branchId    String?            @map("branch_id") @db.Uuid
+  code        String             @db.VarChar(40)
+  name        String             @db.VarChar(160)
+  direction   FinancialDirection @default(BOTH)
+  isActive    Boolean            @default(true) @map("is_active")
+  createdById String             @map("created_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?          @map("deleted_at") @db.Timestamptz(6)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "financial_categories_tenant_fk")
+  company     Company      @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "financial_categories_company_fk")
+  branch      Branch?      @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "financial_categories_branch_fk")
+  createdBy   User         @relation("FinancialCategoryCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "financial_categories_created_by_fk")
+  payables    Payable[]
+  receivables Receivable[]
+
+  @@unique([tenantId, companyId, id], map: "financial_categories_tenant_company_id_key")
+  @@unique([tenantId, companyId, code], map: "financial_categories_tenant_company_code_key")
+  @@index([tenantId, companyId, name], map: "financial_categories_name_idx")
+  @@map("financial_categories")
+}
+
+model CostCenter {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  branchId    String?   @map("branch_id") @db.Uuid
+  code        String    @db.VarChar(40)
+  name        String    @db.VarChar(160)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "cost_centers_tenant_fk")
+  company     Company      @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "cost_centers_company_fk")
+  branch      Branch?      @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "cost_centers_branch_fk")
+  createdBy   User         @relation("CostCenterCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "cost_centers_created_by_fk")
+  payables    Payable[]
+  receivables Receivable[]
+
+  @@unique([tenantId, companyId, id], map: "cost_centers_tenant_company_id_key")
+  @@unique([tenantId, companyId, code], map: "cost_centers_tenant_company_code_key")
+  @@index([tenantId, companyId, name], map: "cost_centers_name_idx")
+  @@map("cost_centers")
+}
+
+model FinancialAccount {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String               @map("tenant_id") @db.Uuid
+  companyId    String               @map("company_id") @db.Uuid
+  branchId     String?              @map("branch_id") @db.Uuid
+  code         String               @db.VarChar(40)
+  name         String               @db.VarChar(160)
+  type         FinancialAccountType
+  currencyCode String               @default("BRL") @map("currency_code") @db.Char(3)
+  isActive     Boolean              @default(true) @map("is_active")
+  createdById  String               @map("created_by_id") @db.Uuid
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?            @map("deleted_at") @db.Timestamptz(6)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "financial_accounts_tenant_fk")
+  company   Company   @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "financial_accounts_company_fk")
+  branch    Branch?   @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "financial_accounts_branch_fk")
+  createdBy User      @relation("FinancialAccountCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "financial_accounts_created_by_fk")
+  payments  Payment[]
+  receipts  Receipt[]
+  bankImports BankImport[]
+  bankTransactions BankTransaction[]
+  reconciliationGroups BankReconciliationGroup[]
+
+  @@unique([tenantId, companyId, id], map: "financial_accounts_tenant_company_id_key")
+  @@unique([tenantId, companyId, code], map: "financial_accounts_tenant_company_code_key")
+  @@index([tenantId, companyId, name], map: "financial_accounts_name_idx")
+  @@map("financial_accounts")
+}
+
+model Payment {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
+  branchId           String?  @map("branch_id") @db.Uuid
+  payableId          String   @map("payable_id") @db.Uuid
+  financialAccountId String   @map("financial_account_id") @db.Uuid
+  principalAmount    Decimal  @map("principal_amount") @db.Decimal(19, 4)
+  interestAmount     Decimal  @default(0) @map("interest_amount") @db.Decimal(19, 4)
+  fineAmount         Decimal  @default(0) @map("fine_amount") @db.Decimal(19, 4)
+  discountAmount     Decimal  @default(0) @map("discount_amount") @db.Decimal(19, 4)
+  cashAmount         Decimal  @map("cash_amount") @db.Decimal(19, 4)
+  occurredAt         DateTime @map("occurred_at") @db.Timestamptz(6)
+  note               String?  @db.VarChar(500)
+  createdById        String   @map("created_by_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "payments_tenant_fk")
+  company          Company          @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "payments_company_fk")
+  branch           Branch?          @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payments_branch_fk")
+  payable          Payable          @relation(fields: [tenantId, companyId, payableId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payments_payable_fk")
+  financialAccount FinancialAccount @relation(fields: [tenantId, companyId, financialAccountId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payments_financial_account_fk")
+  createdBy        User             @relation("PaymentCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "payments_created_by_fk")
+  reversal         PaymentReversal?
+  reconciliationItems BankReconciliationItem[]
+
+  @@unique([tenantId, companyId, id], map: "payments_tenant_company_id_key")
+  @@index([tenantId, companyId, payableId, occurredAt], map: "payments_payable_time_idx")
+  @@map("payments")
+}
+
+model PaymentReversal {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  branchId    String?  @map("branch_id") @db.Uuid
+  paymentId   String   @map("payment_id") @db.Uuid
+  reason      String   @db.VarChar(500)
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "payment_reversals_tenant_fk")
+  company   Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "payment_reversals_company_fk")
+  branch    Branch? @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payment_reversals_branch_fk")
+  payment   Payment @relation(fields: [tenantId, companyId, paymentId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "payment_reversals_payment_fk")
+  createdBy User    @relation("PaymentReversalCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "payment_reversals_created_by_fk")
+
+  @@unique([tenantId, companyId, id], map: "payment_reversals_tenant_company_id_key")
+  @@unique([tenantId, companyId, paymentId], map: "payment_reversals_payment_key")
+  @@index([tenantId, companyId, occurredAt], map: "payment_reversals_time_idx")
+  @@map("payment_reversals")
+}
+
+model Receipt {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
+  branchId           String?  @map("branch_id") @db.Uuid
+  receivableId       String   @map("receivable_id") @db.Uuid
+  financialAccountId String   @map("financial_account_id") @db.Uuid
+  principalAmount    Decimal  @map("principal_amount") @db.Decimal(19, 4)
+  interestAmount     Decimal  @default(0) @map("interest_amount") @db.Decimal(19, 4)
+  fineAmount         Decimal  @default(0) @map("fine_amount") @db.Decimal(19, 4)
+  discountAmount     Decimal  @default(0) @map("discount_amount") @db.Decimal(19, 4)
+  cashAmount         Decimal  @map("cash_amount") @db.Decimal(19, 4)
+  occurredAt         DateTime @map("occurred_at") @db.Timestamptz(6)
+  note               String?  @db.VarChar(500)
+  createdById        String   @map("created_by_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "receipts_tenant_fk")
+  company          Company          @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipts_company_fk")
+  branch           Branch?          @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipts_branch_fk")
+  receivable       Receivable       @relation(fields: [tenantId, companyId, receivableId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipts_receivable_fk")
+  financialAccount FinancialAccount @relation(fields: [tenantId, companyId, financialAccountId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipts_financial_account_fk")
+  createdBy        User             @relation("ReceiptCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipts_created_by_fk")
+  reversal         ReceiptReversal?
+  reconciliationItems BankReconciliationItem[]
+
+  @@unique([tenantId, companyId, id], map: "receipts_tenant_company_id_key")
+  @@index([tenantId, companyId, receivableId, occurredAt], map: "receipts_receivable_time_idx")
+  @@map("receipts")
+}
+
+model ReceiptReversal {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  branchId    String?  @map("branch_id") @db.Uuid
+  receiptId   String   @map("receipt_id") @db.Uuid
+  reason      String   @db.VarChar(500)
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "receipt_reversals_tenant_fk")
+  company   Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipt_reversals_company_fk")
+  branch    Branch? @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipt_reversals_branch_fk")
+  receipt   Receipt @relation(fields: [tenantId, companyId, receiptId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipt_reversals_receipt_fk")
+  createdBy User    @relation("ReceiptReversalCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "receipt_reversals_created_by_fk")
+
+  @@unique([tenantId, companyId, id], map: "receipt_reversals_tenant_company_id_key")
+  @@unique([tenantId, companyId, receiptId], map: "receipt_reversals_receipt_key")
+  @@index([tenantId, companyId, occurredAt], map: "receipt_reversals_time_idx")
+  @@map("receipt_reversals")
+}
+
+model BankImport {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  companyId          String           @map("company_id") @db.Uuid
+  branchId           String?          @map("branch_id") @db.Uuid
+  financialAccountId String           @map("financial_account_id") @db.Uuid
+  format             BankImportFormat
+  contentHash        String           @map("content_hash") @db.Char(64)
+  sourceName         String?          @map("source_name") @db.VarChar(255)
+  totalRows          Int              @map("total_rows")
+  importedRows       Int              @map("imported_rows")
+  possibleDuplicates Int              @default(0) @map("possible_duplicates")
+  createdById        String           @map("created_by_id") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "bank_imports_tenant_fk")
+  company          Company          @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_imports_company_fk")
+  branch           Branch?          @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_imports_branch_fk")
+  financialAccount FinancialAccount @relation(fields: [tenantId, companyId, financialAccountId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_imports_account_fk")
+  createdBy        User             @relation("BankImportCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_imports_created_by_fk")
+  transactions     BankTransaction[]
+
+  @@unique([tenantId, companyId, id], map: "bank_imports_tenant_company_id_key")
+  @@unique([tenantId, companyId, financialAccountId, contentHash], map: "bank_imports_content_key")
+  @@index([tenantId, companyId, financialAccountId, createdAt], map: "bank_imports_account_time_idx")
+  @@map("bank_imports")
+}
+
+model BankTransaction {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
+  branchId           String?  @map("branch_id") @db.Uuid
+  bankImportId       String   @map("bank_import_id") @db.Uuid
+  financialAccountId String   @map("financial_account_id") @db.Uuid
+  sourceLine         Int      @map("source_line")
+  externalId         String?  @map("external_id") @db.VarChar(160)
+  fingerprint        String   @db.Char(64)
+  bookedAt           DateTime @map("booked_at") @db.Timestamptz(6)
+  amount             Decimal  @db.Decimal(19, 4)
+  currencyCode       String   @map("currency_code") @db.Char(3)
+  description        String   @db.VarChar(500)
+  memo               String?  @db.VarChar(500)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "bank_transactions_tenant_fk")
+  company          Company          @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_transactions_company_fk")
+  branch           Branch?          @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_transactions_branch_fk")
+  bankImport       BankImport       @relation(fields: [tenantId, companyId, bankImportId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_transactions_import_fk")
+  financialAccount FinancialAccount @relation(fields: [tenantId, companyId, financialAccountId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_transactions_account_fk")
+  reconciliationItems BankReconciliationItem[]
+
+  @@unique([tenantId, companyId, id], map: "bank_transactions_tenant_company_id_key")
+  @@unique([tenantId, companyId, bankImportId, sourceLine], map: "bank_transactions_import_line_key")
+  @@index([tenantId, companyId, financialAccountId, bookedAt], map: "bank_transactions_account_time_idx")
+  @@index([tenantId, companyId, financialAccountId, fingerprint], map: "bank_transactions_fingerprint_idx")
+  @@map("bank_transactions")
+}
+
+model BankReconciliationGroup {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
+  branchId           String?  @map("branch_id") @db.Uuid
+  financialAccountId String   @map("financial_account_id") @db.Uuid
+  reconciledAt       DateTime @map("reconciled_at") @db.Timestamptz(6)
+  note               String?  @db.VarChar(500)
+  createdById        String   @map("created_by_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_groups_tenant_fk")
+  company          Company          @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_groups_company_fk")
+  branch           Branch?          @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_groups_branch_fk")
+  financialAccount FinancialAccount @relation(fields: [tenantId, companyId, financialAccountId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_groups_account_fk")
+  createdBy        User             @relation("BankReconciliationCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_groups_created_by_fk")
+  items            BankReconciliationItem[]
+  reversal         BankReconciliationReversal?
+  reservations     BankReconciliationReservation[]
+
+  @@unique([tenantId, companyId, id], map: "bank_reconciliation_groups_tenant_company_id_key")
+  @@index([tenantId, companyId, financialAccountId, reconciledAt], map: "bank_reconciliation_groups_account_time_idx")
+  @@map("bank_reconciliation_groups")
+}
+
+model BankReconciliationItem {
+  id                String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                        @map("tenant_id") @db.Uuid
+  companyId         String                        @map("company_id") @db.Uuid
+  groupId           String                        @map("group_id") @db.Uuid
+  participantKind   ReconciliationParticipantKind @map("participant_kind")
+  bankTransactionId String?                       @map("bank_transaction_id") @db.Uuid
+  paymentId         String?                       @map("payment_id") @db.Uuid
+  receiptId         String?                       @map("receipt_id") @db.Uuid
+  createdAt         DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_items_tenant_fk")
+  company         Company                 @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_items_company_fk")
+  group           BankReconciliationGroup @relation(fields: [tenantId, companyId, groupId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_items_group_fk")
+  bankTransaction BankTransaction?        @relation(fields: [tenantId, companyId, bankTransactionId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_items_transaction_fk")
+  payment         Payment?                @relation(fields: [tenantId, companyId, paymentId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_items_payment_fk")
+  receipt         Receipt?                @relation(fields: [tenantId, companyId, receiptId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_items_receipt_fk")
+  reservation     BankReconciliationReservation?
+
+  @@unique([tenantId, companyId, id], map: "bank_reconciliation_items_tenant_company_id_key")
+  @@index([tenantId, companyId, groupId], map: "bank_reconciliation_items_group_idx")
+  @@map("bank_reconciliation_items")
+}
+
+model BankReconciliationReversal {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  branchId    String?  @map("branch_id") @db.Uuid
+  groupId     String   @map("group_id") @db.Uuid
+  reason      String   @db.VarChar(500)
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_reversals_tenant_fk")
+  company   Company                 @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_reversals_company_fk")
+  branch    Branch?                 @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_reversals_branch_fk")
+  group     BankReconciliationGroup @relation(fields: [tenantId, companyId, groupId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_reversals_group_fk")
+  createdBy User                    @relation("BankReconciliationReversalCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_reversals_created_by_fk")
+
+  @@unique([tenantId, companyId, id], map: "bank_reconciliation_reversals_tenant_company_id_key")
+  @@unique([tenantId, companyId, groupId], map: "bank_reconciliation_reversals_group_key")
+  @@map("bank_reconciliation_reversals")
+}
+
+model BankReconciliationReservation {
+  tenantId        String                        @map("tenant_id") @db.Uuid
+  companyId       String                        @map("company_id") @db.Uuid
+  participantKind ReconciliationParticipantKind @map("participant_kind")
+  participantId   String                        @map("participant_id") @db.Uuid
+  groupId         String                        @map("group_id") @db.Uuid
+  itemId          String                        @map("item_id") @db.Uuid
+  createdAt       DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group BankReconciliationGroup @relation(fields: [tenantId, companyId, groupId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_reservations_group_fk")
+  item  BankReconciliationItem  @relation(fields: [tenantId, companyId, itemId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "bank_reconciliation_reservations_item_fk")
+
+  @@id([tenantId, companyId, participantKind, participantId], map: "bank_reconciliation_reservations_pkey")
+  @@unique([tenantId, companyId, itemId], map: "bank_reconciliation_reservations_item_key")
+  @@index([tenantId, companyId, groupId], map: "bank_reconciliation_reservations_group_idx")
+  @@map("bank_reconciliation_reservations")
+}
+
+model JournalEntry {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String             @map("tenant_id") @db.Uuid
+  companyId       String             @map("company_id") @db.Uuid
+  branchId        String?            @map("branch_id") @db.Uuid
+  entryNumber     String             @map("entry_number") @db.VarChar(60)
+  entryDate       DateTime           @map("entry_date") @db.Date
+  description     String             @db.VarChar(500)
+  sourceType      String?            @map("source_type") @db.VarChar(80)
+  sourceId        String?            @map("source_id") @db.Uuid
+  status          JournalEntryStatus @default(DRAFT)
+  postedAt        DateTime?          @map("posted_at") @db.Timestamptz(6)
+  reversesEntryId String?            @map("reverses_entry_id") @db.Uuid
+  createdById     String             @map("created_by_id") @db.Uuid
+  updatedById     String?            @map("updated_by_id") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entries_tenant_id_fk")
+  company    Company            @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entries_company_fk")
+  branch     Branch?            @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entries_branch_fk")
+  createdBy  User               @relation("JournalEntryCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entries_created_by_fk")
+  updatedBy  User?              @relation("JournalEntryUpdatedBy", fields: [tenantId, updatedById], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entries_updated_by_fk")
+  lines      JournalEntryLine[]
+  reverses   JournalEntry?      @relation("JournalEntryReversal", fields: [tenantId, companyId, reversesEntryId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entries_reversal_fk")
+  reversedBy JournalEntry[]     @relation("JournalEntryReversal")
+
+  @@unique([tenantId, companyId, id], map: "journal_entries_tenant_company_id_key")
+  @@unique([tenantId, companyId, entryNumber], map: "journal_entries_number_key")
+  @@index([tenantId, companyId, entryDate, status], map: "journal_entries_date_status_idx")
+  @@index([tenantId, companyId, sourceType, sourceId], map: "journal_entries_source_idx")
+  @@map("journal_entries")
+}
+
+model JournalEntryLine {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
+  journalEntryId String   @map("journal_entry_id") @db.Uuid
+  lineNumber     Int      @map("line_number")
+  accountCode    String   @map("account_code") @db.VarChar(60)
+  accountName    String   @map("account_name") @db.VarChar(180)
+  description    String?  @db.VarChar(500)
+  debit          Decimal  @default(0) @db.Decimal(19, 4)
+  credit         Decimal  @default(0) @db.Decimal(19, 4)
+  costCenterCode String?  @map("cost_center_code") @db.VarChar(60)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entry_lines_tenant_id_fk")
+  company      Company      @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "journal_entry_lines_company_fk")
+  journalEntry JournalEntry @relation(fields: [tenantId, companyId, journalEntryId], references: [tenantId, companyId, id], onDelete: Cascade, onUpdate: NoAction, map: "journal_entry_lines_entry_fk")
+
+  @@unique([tenantId, companyId, journalEntryId, lineNumber], map: "journal_entry_lines_number_key")
+  @@index([tenantId, companyId, accountCode], map: "journal_entry_lines_account_idx")
+  @@map("journal_entry_lines")
+}
+
+model GlossaryTerm {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String           @map("tenant_id") @db.Uuid
+  slug                 String           @db.VarChar(120)
+  name                 String           @db.VarChar(160)
+  acronym              String?          @db.VarChar(32)
+  category             GlossaryCategory
+  simpleDefinition     String           @map("simple_definition") @db.Text
+  managerialDefinition String?          @map("managerial_definition") @db.Text
+  technicalDefinition  String?          @map("technical_definition") @db.Text
+  practicalExample     String?          @map("practical_example") @db.Text
+  numericExample       String?          @map("numeric_example") @db.Text
+  formula              String?          @db.Text
+  importance           String?          @db.Text
+  whereAppears         String?          @map("where_appears") @db.Text
+  interpretation       String?          @db.Text
+  commonErrors         String?          @map("common_errors") @db.Text
+  relatedRisks         String?          @map("related_risks") @db.Text
+  relatedTermSlugs     String[]         @default([]) @map("related_term_slugs")
+  references           Json             @default("[]")
+  isPublished          Boolean          @default(true) @map("is_published")
+  lastReviewedAt       DateTime?        @map("last_reviewed_at") @db.Date
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "glossary_terms_tenant_id_fk")
+
+  @@unique([tenantId, id], map: "glossary_terms_tenant_id_id_key")
+  @@unique([tenantId, slug], map: "glossary_terms_tenant_slug_key")
+  @@index([tenantId, category, isPublished], map: "glossary_terms_category_idx")
+  @@map("glossary_terms")
+}
+
+model PendingItem {
+  id                String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String     @map("tenant_id") @db.Uuid
+  companyId         String     @map("company_id") @db.Uuid
+  branchId          String?    @map("branch_id") @db.Uuid
+  type              String     @db.VarChar(80)
+  category          String     @db.VarChar(80)
+  title             String     @db.VarChar(180)
+  description       String?    @db.Text
+  responsibleUserId String?    @map("responsible_user_id") @db.Uuid
+  priority          Priority   @default(ATTENTION)
+  dueDate           DateTime?  @map("due_date") @db.Date
+  status            WorkStatus @default(OPEN)
+  sourceType        String?    @map("source_type") @db.VarChar(80)
+  sourceId          String?    @map("source_id") @db.Uuid
+  impact            String?    @db.Text
+  suggestedAction   String?    @map("suggested_action") @db.Text
+  resolvedAt        DateTime?  @map("resolved_at") @db.Timestamptz(6)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "pending_items_tenant_id_fk")
+  company         Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "pending_items_company_fk")
+  branch          Branch? @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "pending_items_branch_fk")
+  responsibleUser User?   @relation("PendingResponsible", fields: [tenantId, responsibleUserId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "pending_items_responsible_fk")
+
+  @@unique([tenantId, companyId, id], map: "pending_items_tenant_company_id_key")
+  @@index([tenantId, companyId, status, priority, dueDate], map: "pending_items_queue_idx")
+  @@index([tenantId, responsibleUserId, status], map: "pending_items_responsible_idx")
+  @@map("pending_items")
+}
+
+model Risk {
+  id                String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String     @map("tenant_id") @db.Uuid
+  companyId         String     @map("company_id") @db.Uuid
+  branchId          String?    @map("branch_id") @db.Uuid
+  title             String     @db.VarChar(180)
+  area              String     @db.VarChar(100)
+  problem           String     @db.Text
+  evidence          String?    @db.Text
+  cause             String?    @db.Text
+  probability       RiskLevel
+  impact            RiskLevel
+  financialImpact   Decimal?   @map("financial_impact") @db.Decimal(19, 4)
+  taxImpact         String?    @map("tax_impact") @db.Text
+  laborImpact       String?    @map("labor_impact") @db.Text
+  operationalImpact String?    @map("operational_impact") @db.Text
+  criticality       Priority
+  ownerUserId       String?    @map("owner_user_id") @db.Uuid
+  dueDate           DateTime?  @map("due_date") @db.Date
+  status            RiskStatus @default(IDENTIFIED)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  closedAt          DateTime?  @map("closed_at") @db.Timestamptz(6)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "risks_tenant_id_fk")
+  company     Company      @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "risks_company_fk")
+  branch      Branch?      @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "risks_branch_fk")
+  owner       User?        @relation("RiskOwner", fields: [tenantId, ownerUserId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "risks_owner_fk")
+  actionPlans ActionPlan[]
+
+  @@unique([tenantId, companyId, id], map: "risks_tenant_company_id_key")
+  @@index([tenantId, companyId, status, criticality], map: "risks_status_criticality_idx")
+  @@index([tenantId, ownerUserId, status], map: "risks_owner_idx")
+  @@map("risks")
+}
+
+model ActionPlan {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  companyId       String           @map("company_id") @db.Uuid
+  branchId        String?          @map("branch_id") @db.Uuid
+  riskId          String?          @map("risk_id") @db.Uuid
+  title           String           @db.VarChar(180)
+  description     String           @db.Text
+  ownerUserId     String?          @map("owner_user_id") @db.Uuid
+  priority        Priority         @default(IMPORTANT)
+  status          ActionPlanStatus @default(PLANNED)
+  startDate       DateTime?        @map("start_date") @db.Date
+  dueDate         DateTime         @map("due_date") @db.Date
+  completedAt     DateTime?        @map("completed_at") @db.Timestamptz(6)
+  progressPercent Int              @default(0) @map("progress_percent")
+  successCriteria String?          @map("success_criteria") @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "action_plans_tenant_id_fk")
+  company Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "action_plans_company_fk")
+  branch  Branch? @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "action_plans_branch_fk")
+  risk    Risk?   @relation(fields: [tenantId, companyId, riskId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "action_plans_risk_fk")
+  owner   User?   @relation("ActionPlanOwner", fields: [tenantId, ownerUserId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "action_plans_owner_fk")
+
+  @@unique([tenantId, companyId, id], map: "action_plans_tenant_company_id_key")
+  @@index([tenantId, companyId, status, dueDate], map: "action_plans_status_due_idx")
+  @@index([tenantId, ownerUserId, status], map: "action_plans_owner_idx")
+  @@map("action_plans")
+}
+
+model AuditLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  companyId      String?  @map("company_id") @db.Uuid
+  branchId       String?  @map("branch_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  sessionId      String?  @map("session_id") @db.Uuid
+  action         String   @db.VarChar(100)
+  entityType     String   @map("entity_type") @db.VarChar(100)
+  entityId       String?  @map("entity_id") @db.Uuid
+  beforeData     Json?    @map("before_data")
+  afterData      Json?    @map("after_data")
+  metadata       Json     @default("{}")
+  redactedFields String[] @default([]) @map("redacted_fields")
+  ipHash         String?  @map("ip_hash") @db.VarChar(128)
+  userAgent      String?  @map("user_agent") @db.VarChar(500)
+  integrityHash  String?  @map("integrity_hash") @db.VarChar(128)
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "audit_logs_tenant_id_fk")
+  company Company? @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "audit_logs_company_fk")
+  branch  Branch?  @relation(fields: [tenantId, companyId, branchId], references: [tenantId, companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "audit_logs_branch_fk")
+  actor   User?    @relation("AuditActor", fields: [tenantId, actorUserId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "audit_logs_actor_fk")
+
+  @@unique([tenantId, id], map: "audit_logs_tenant_id_id_key")
+  @@index([tenantId, companyId, occurredAt], map: "audit_logs_company_time_idx")
+  @@index([tenantId, actorUserId, occurredAt], map: "audit_logs_actor_time_idx")
+  @@index([tenantId, entityType, entityId, occurredAt], map: "audit_logs_entity_time_idx")
+  @@map("audit_logs")
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  operation      String   @db.VarChar(100)
+  key            String   @db.VarChar(128)
+  requestHash    String   @map("request_hash") @db.Char(64)
+  resourceType   String   @map("resource_type") @db.VarChar(100)
+  resourceId     String?  @map("resource_id") @db.Uuid
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "idempotency_records_tenant_fk")
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "idempotency_records_user_fk")
+
+  @@unique([tenantId, userId, operation, key], map: "idempotency_records_scope_key")
+  @@index([tenantId, expiresAt], map: "idempotency_records_expiry_idx")
+  @@map("idempotency_records")
+}

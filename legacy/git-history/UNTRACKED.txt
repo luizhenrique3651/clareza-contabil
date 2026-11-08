@@ -1,0 +1,5 @@
+docs/RETOMADA_MOURAO_CLAREZA_2026-08-04.md
+public/brand/mourao-crest-light.jpeg
+public/brand/mourao-crest-navy.jpeg
+public/brand/mourao-original.jpeg
+public/brand/mourao-ui-texture.png

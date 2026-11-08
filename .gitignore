@@ -1,0 +1,33 @@
+# Dependências e builds
+node_modules/
+frontend/node_modules/
+frontend/dist/
+legacy/node_modules/
+legacy/dist/
+legacy/.next/
+legacy/work/
+
+# Java / Maven
+backend/target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/timing.properties
+hs_err_pid*
+replay_pid*
+
+# Variáveis de ambiente e segredos
+.env
+.env.*
+!.env.example
+legacy/.env
+legacy/.env.*
+!legacy/.env.example
+
+# IDEs e Sistema Operacional
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

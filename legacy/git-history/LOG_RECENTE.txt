@@ -1,0 +1,7 @@
+1a49d1fcc8fde4bded0c2588842519d2b19687b5	2026-08-04T22:33:52-04:00	feat: add audited bank import APIs
+881713fa5d3c7d8340e072468bef87f0695aacc5	2026-07-29T17:39:50-04:00	feat: establish phase three reconciliation foundation
+282785981030585415302785b9124d62a7b14a40	2026-07-29T17:09:31-04:00	feat: complete Clareza phase two financial core
+898f71c57429e378da709e89ed5576e860dcc0cb	2026-07-25T02:08:57-04:00	feat: complete Clareza phase one identity context
+47faed91b3eb6d102f1931c9fda1eef9ee629803	2026-07-25T01:00:02-04:00	docs: install Clareza development workflow
+8278abae067888fa4de583e1bfe03ee59d1c9687	2026-07-25T00:40:41-04:00	test: complete Clareza phase zero validation
+680665077d387fc8c201de64f3e3a4faa91bd2e6	2026-07-25T00:03:44-04:00	chore: preserve recovered Clareza baseline

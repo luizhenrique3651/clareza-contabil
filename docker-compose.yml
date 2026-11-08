@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clareza-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clarity_mvp}
+      POSTGRES_USER: ${POSTGRES_USER:-clarity_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clarity_local_dev_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-clarity_owner} -d $${POSTGRES_DB:-clarity_mvp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - clareza_pgdata:/var/lib/postgresql/data
+
+volumes:
+  clareza_pgdata:

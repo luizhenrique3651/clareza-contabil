@@ -1,0 +1,679 @@
+diff --git a/app/api/v1/_shared/bank-collection.ts b/app/api/v1/_shared/bank-collection.ts
+index 5b23ba5..00e8d24 100644
+--- a/app/api/v1/_shared/bank-collection.ts
++++ b/app/api/v1/_shared/bank-collection.ts
+@@ -33,7 +33,7 @@ export async function handleBankImportsGet(request: Request) {
+     const context = await requestContext(request);
+     if ("error" in context) {
+       if (context.error === "AUTHENTICATION_REQUIRED") {
+-        return problem(401, context.error, "Entre para acessar o Clareza.", requestId);
++        return problem(401, context.error, "Entre para acessar o Mourão Clareza.", requestId);
+       }
+       if (context.error === "COMPANY_CONTEXT_REQUIRED") {
+         return problem(409, context.error, "Selecione uma empresa autorizada.", requestId);
+@@ -68,7 +68,7 @@ export async function handleBankImportsPost(request: Request) {
+     const context = await requestContext(request);
+     if ("error" in context) {
+       if (context.error === "AUTHENTICATION_REQUIRED") {
+-        return problem(401, context.error, "Entre para acessar o Clareza.", requestId);
++        return problem(401, context.error, "Entre para acessar o Mourão Clareza.", requestId);
+       }
+       if (context.error === "COMPANY_CONTEXT_REQUIRED") {
+         return problem(409, context.error, "Selecione uma empresa autorizada.", requestId);
+@@ -113,7 +113,7 @@ export async function handleBankTransactionsGet(request: Request) {
+     const context = await requestContext(request);
+     if ("error" in context) {
+       if (context.error === "AUTHENTICATION_REQUIRED") {
+-        return problem(401, context.error, "Entre para acessar o Clareza.", requestId);
++        return problem(401, context.error, "Entre para acessar o Mourão Clareza.", requestId);
+       }
+       if (context.error === "COMPANY_CONTEXT_REQUIRED") {
+         return problem(409, context.error, "Selecione uma empresa autorizada.", requestId);
+diff --git a/app/api/v1/_shared/financial-collection.ts b/app/api/v1/_shared/financial-collection.ts
+index d7a3b08..47525d6 100644
+--- a/app/api/v1/_shared/financial-collection.ts
++++ b/app/api/v1/_shared/financial-collection.ts
+@@ -87,7 +87,7 @@ export async function requestContext(
+ 
+ function contextProblem(code: string, requestId: string) {
+   if (code === "AUTHENTICATION_REQUIRED") {
+-    return problem(401, code, "Entre para acessar o Clareza.", requestId);
++    return problem(401, code, "Entre para acessar o Mourão Clareza.", requestId);
+   }
+   if (code === "COMPANY_CONTEXT_REQUIRED") {
+     return problem(409, code, "Selecione uma empresa autorizada.", requestId);
+@@ -371,7 +371,7 @@ export function financialError(error: unknown, requestId: string) {
+     return problem(
+       503,
+       "DATABASE_UNAVAILABLE",
+-      "O banco do Clareza ainda não está configurado neste ambiente.",
++      "O banco do Mourão Clareza ainda não está configurado neste ambiente.",
+       requestId,
+     );
+   }
+diff --git a/app/api/v1/me/route.ts b/app/api/v1/me/route.ts
+index b9d110a..8a8c484 100644
+--- a/app/api/v1/me/route.ts
++++ b/app/api/v1/me/route.ts
+@@ -35,7 +35,7 @@ export async function GET(request: Request) {
+     return problem(
+       401,
+       "AUTHENTICATION_REQUIRED",
+-      "Entre para acessar o Clareza.",
++      "Entre para acessar o Mourão Clareza.",
+       requestId,
+     );
+   }
+@@ -46,7 +46,7 @@ export async function GET(request: Request) {
+       return problem(
+         403,
+         "MEMBERSHIP_REQUIRED",
+-        "Sua identidade ainda não possui acesso a uma empresa no Clareza.",
++        "Sua identidade ainda não possui acesso a uma empresa no Mourão Clareza.",
+         requestId,
+       );
+     }
+@@ -60,7 +60,7 @@ export async function GET(request: Request) {
+       return problem(
+         503,
+         "DATABASE_UNAVAILABLE",
+-        "O banco do Clareza ainda não está configurado neste ambiente.",
++        "O banco do Mourão Clareza ainda não está configurado neste ambiente.",
+         requestId,
+       );
+     }
+diff --git a/app/application-context.tsx b/app/application-context.tsx
+index 92620a1..162c030 100644
+--- a/app/application-context.tsx
++++ b/app/application-context.tsx
+@@ -173,7 +173,7 @@ function stateForError(error: unknown, revision: number): ApplicationState {
+     message:
+       error instanceof Error
+         ? error.message
+-        : "Não foi possível preparar o contexto do Clareza.",
++        : "Não foi possível preparar o contexto do Mourão Clareza.",
+     code: "APPLICATION_CONTEXT_ERROR",
+     requestId: null,
+   });
+@@ -286,7 +286,7 @@ export function ApplicationContextProvider({
+           selectionMessage =
+             navigation.fingerprint === previousNavigation?.fingerprint
+               ? error.message
+-              : "Seu acesso mudou. O Clareza selecionou novamente um contexto autorizado.";
++              : "Seu acesso mudou. O Mourão Clareza selecionou novamente um contexto autorizado.";
+           selectionCode =
+             navigation.fingerprint === previousNavigation?.fingerprint
+               ? error.code
+diff --git a/app/application.tsx b/app/application.tsx
+index 4a66d84..55f9b2b 100644
+--- a/app/application.tsx
++++ b/app/application.tsx
+@@ -35,14 +35,14 @@ const stateContent: Record<
+   },
+   unauthenticated: {
+     eyebrow: "Não autenticado",
+-    title: "Entre para acessar o Clareza",
++    title: "Entre para acessar o Mourão Clareza",
+     description:
+       "Este ambiente não recebeu uma identidade autenticada. Nenhum usuário fictício será utilizado como fallback.",
+     icon: UserX,
+   },
+   forbidden: {
+     eyebrow: "Sem acesso",
+-    title: "Sua identidade não possui acesso ao Clareza",
++    title: "Sua identidade não possui acesso ao Mourão Clareza",
+     description:
+       "Solicite a um administrador uma membership ativa em uma empresa ou unidade.",
+     icon: LockKeyhole,
+@@ -51,7 +51,7 @@ const stateContent: Record<
+     eyebrow: "Serviço indisponível",
+     title: "Não foi possível consultar seu acesso",
+     description:
+-      "O backend ou o banco do Clareza está temporariamente indisponível.",
++      "O serviço ou o banco do Mourão Clareza está temporariamente indisponível.",
+     icon: ServerCrash,
+   },
+   error: {
+@@ -96,9 +96,14 @@ function SessionStateScreen({
+       data-session-state={switching ? "switching" : status}
+     >
+       <section className="session-state-card" aria-live="polite">
+-        <span className="brand-mark session-brand" aria-hidden="true">
+-          C
+-        </span>
++        <span
++          className="session-brand-lockup"
++          role="img"
++          aria-label="Mourão Inteligência Financeira"
++        />
++        <p className="session-product-name">
++          Mourão Clareza <span>Contábil e Financeira</span>
++        </p>
+         <div
+           className={`session-state-icon ${
+             status === "loading" || switching ? "is-loading" : ""
+diff --git a/app/command-center.tsx b/app/command-center.tsx
+index c387f28..8660b8f 100644
+--- a/app/command-center.tsx
++++ b/app/command-center.tsx
+@@ -313,13 +313,15 @@ export function CommandCenter() {
+ 
+       <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
+         <div className="brand-row">
+-          <a className="brand" href="#visao-geral" aria-label="Clareza, início">
+-            <span className="brand-mark" aria-hidden="true">
+-              C
+-            </span>
++          <a
++            className="brand"
++            href="#visao-geral"
++            aria-label="Mourão Clareza Contábil e Financeira, início"
++          >
++            <span className="brand-emblem" aria-hidden="true" />
+             <span>
+-              <strong>clareza</strong>
+-              <small>gestão inteligente</small>
++              <strong>Mourão Clareza</strong>
++              <small>Contábil e Financeira</small>
+             </span>
+           </a>
+           <button
+@@ -843,7 +845,7 @@ export function CommandCenter() {
+           </section>
+ 
+           <footer className="product-footer">
+-            <span><span className="brand-mark small" aria-hidden="true">C</span> Clareza</span>
++            <span><span className="brand-emblem small" aria-hidden="true" /> Mourão Clareza</span>
+             <p>Dados demonstrativos • Nenhuma informação real é utilizada neste ambiente.</p>
+             <span><ShieldCheck size={15} aria-hidden="true" /> Contexto obtido do backend</span>
+           </footer>
+diff --git a/app/globals.css b/app/globals.css
+index a7a3704..d7bef9c 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -1,20 +1,23 @@
+ @import "tailwindcss";
+ 
+ :root {
+-  --canvas: #f3f5f1;
++  --canvas: #f5f3ed;
+   --surface: #ffffff;
+-  --surface-soft: #f7f8f5;
+-  --ink: #17332e;
+-  --ink-strong: #0d2723;
+-  --muted: #68756f;
+-  --muted-strong: #4e5d57;
+-  --line: #dfe4df;
+-  --line-soft: #ebeeea;
+-  --brand: #0d6f62;
+-  --brand-dark: #0c4f47;
+-  --brand-soft: #e4f3ee;
+-  --lime: #d7ef83;
+-  --coral: #ef9d72;
++  --surface-soft: #faf8f2;
++  --ink: #172033;
++  --ink-strong: #08152f;
++  --muted: #667085;
++  --muted-strong: #475467;
++  --line: #e4e0d6;
++  --line-soft: #eeeae1;
++  --brand: #0b1b3a;
++  --brand-dark: #061127;
++  --brand-soft: #e8edf5;
++  --lime: #d6a640;
++  --coral: #c9855b;
++  --gold: #d6a640;
++  --gold-strong: #8a641d;
++  --gold-soft: #fbf4e4;
+   --danger: #b5423c;
+   --danger-soft: #fcecea;
+   --warning: #9a6118;
+@@ -23,8 +26,8 @@
+   --success-soft: #e6f4ed;
+   --info: #3f6589;
+   --info-soft: #eaf1f8;
+-  --shadow-sm: 0 1px 2px rgb(18 39 34 / 5%), 0 5px 16px rgb(18 39 34 / 3%);
+-  --shadow-lg: 0 24px 70px rgb(9 36 30 / 18%);
++  --shadow-sm: 0 1px 2px rgb(8 21 47 / 6%), 0 5px 16px rgb(8 21 47 / 4%);
++  --shadow-lg: 0 24px 70px rgb(6 17 39 / 20%);
+ }
+ 
+ * {
+@@ -41,7 +44,7 @@ body {
+   background: var(--canvas);
+   color: var(--ink);
+   font-family: var(--font-manrope), Arial, sans-serif;
+-  font-size: 14px;
++  font-size: 15px;
+   line-height: 1.5;
+   text-rendering: optimizeLegibility;
+ }
+@@ -74,7 +77,7 @@ select {
+ }
+ 
+ :focus-visible {
+-  outline: 3px solid #65b4a7;
++  outline: 3px solid var(--gold);
+   outline-offset: 3px;
+ }
+ 
+@@ -110,8 +113,9 @@ select {
+   place-items: center;
+   padding: 32px 20px;
+   background:
+-    radial-gradient(circle at top right, rgb(215 239 131 / 28%), transparent 34%),
+-    var(--canvas);
++    linear-gradient(rgb(6 17 39 / 78%), rgb(6 17 39 / 88%)),
++    url("/brand/mourao-ui-texture.png") center / cover fixed,
++    var(--brand-dark);
+ }
+ 
+ .session-state-card {
+@@ -129,8 +133,33 @@ select {
+   text-align: center;
+ }
+ 
+-.session-brand {
+-  margin-bottom: 28px;
++.session-brand-lockup {
++  display: block;
++  width: 212px;
++  height: 178px;
++  margin-bottom: 10px;
++  border-radius: 16px;
++  background: url("/brand/mourao-original.jpeg") center / cover no-repeat;
++  box-shadow: 0 14px 34px rgb(6 17 39 / 18%);
++}
++
++.session-product-name {
++  margin: 0 0 26px;
++  color: var(--brand);
++  font-family: var(--font-newsreader), Georgia, serif;
++  font-size: 19px;
++  font-weight: 700;
++  letter-spacing: -0.015em;
++}
++
++.session-product-name span {
++  display: block;
++  margin-top: 2px;
++  color: var(--gold-strong);
++  font-family: var(--font-manrope), Arial, sans-serif;
++  font-size: 11px;
++  letter-spacing: 0.13em;
++  text-transform: uppercase;
+ }
+ 
+ .session-state-icon {
+@@ -157,7 +186,7 @@ select {
+   line-height: 1.06;
+ }
+ 
+-.session-state-card > p:not(.eyebrow) {
++.session-state-card > p:not(.eyebrow):not(.session-product-name) {
+   max-width: 420px;
+   margin: 0;
+   color: var(--muted);
+@@ -194,10 +223,12 @@ select {
+   z-index: 40;
+   inset: 0 auto 0 0;
+   display: flex;
+-  width: 244px;
++  width: 280px;
+   flex-direction: column;
+-  border-right: 1px solid #29473f;
+-  background: #153b34;
++  border-right: 1px solid rgb(214 166 64 / 28%);
++  background:
++    linear-gradient(rgb(6 17 39 / 92%), rgb(6 17 39 / 97%)),
++    url("/brand/mourao-ui-texture.png") center / cover;
+   color: #e9f0ed;
+   overflow-y: auto;
+ }
+@@ -218,19 +249,15 @@ select {
+   border-radius: 8px;
+ }
+ 
+-.brand-mark {
+-  display: grid;
+-  width: 35px;
+-  height: 35px;
+-  place-items: center;
+-  border-radius: 11px 11px 11px 3px;
+-  background: var(--lime);
+-  color: #17372f;
+-  font-family: var(--font-newsreader), Georgia, serif;
+-  font-size: 23px;
+-  font-weight: 700;
+-  line-height: 1;
+-  box-shadow: inset 0 0 0 1px rgb(14 53 44 / 8%);
++.brand-emblem {
++  display: block;
++  width: 42px;
++  height: 42px;
++  flex: 0 0 auto;
++  border: 1px solid rgb(214 166 64 / 42%);
++  border-radius: 12px;
++  background: url("/brand/mourao-crest-navy.jpeg") center 31% / 155% auto no-repeat;
++  box-shadow: 0 7px 20px rgb(0 0 0 / 20%);
+ }
+ 
+ .brand > span:last-child {
+@@ -240,7 +267,7 @@ select {
+ 
+ .brand strong {
+   color: white;
+-  font-size: 18px;
++  font-size: 16px;
+   font-weight: 750;
+   letter-spacing: -0.04em;
+   line-height: 1.05;
+@@ -248,8 +275,8 @@ select {
+ 
+ .brand small {
+   margin-top: 3px;
+-  color: #a8beb7;
+-  font-size: 9px;
++  color: #d6c498;
++  font-size: 10px;
+   font-weight: 700;
+   letter-spacing: 0.12em;
+   line-height: 1;
+@@ -270,8 +297,8 @@ select {
+ }
+ 
+ .icon-button:hover {
+-  border-color: #b9c6c0;
+-  background: #f9fbf9;
++  border-color: #cfc7b6;
++  background: var(--surface-soft);
+ }
+ 
+ .icon-button:active {
+@@ -292,8 +319,8 @@ select {
+ .company-selector-wrap > label {
+   display: block;
+   margin: 0 0 7px 4px;
+-  color: #91aaa2;
+-  font-size: 10px;
++  color: #d6c498;
++  font-size: 11px;
+   font-weight: 750;
+   letter-spacing: 0.09em;
+   text-transform: uppercase;
+@@ -338,8 +365,8 @@ select {
+ 
+ .company-selector-wrap > p {
+   margin: 8px 0 0 4px;
+-  color: #91aaa2;
+-  font-size: 11px;
++  color: #b8c0d1;
++  font-size: 12px;
+ }
+ 
+ .access-summary {
+@@ -348,23 +375,23 @@ select {
+   padding: 3px 8px;
+   border: 1px solid rgb(255 255 255 / 12%);
+   border-radius: 999px;
+-  color: #c6d8d2;
+-  font-size: 9px;
++  color: #d9deea;
++  font-size: 11px;
+   font-weight: 750;
+   letter-spacing: 0.04em;
+   text-transform: uppercase;
+ }
+ 
+ .access-summary.access-manage {
+-  border-color: rgb(215 239 131 / 30%);
+-  color: var(--lime);
++  border-color: rgb(214 166 64 / 38%);
++  color: #f3d989;
+ }
+ 
+ .context-message {
+   display: block;
+   margin: 8px 4px 0;
+-  color: #ffd6c4;
+-  font-size: 10px;
++  color: #ffd5c8;
++  font-size: 12px;
+ }
+ 
+ .side-nav {
+@@ -378,8 +405,8 @@ select {
+ 
+ .nav-group > p {
+   margin: 0 0 6px 11px;
+-  color: #809b92;
+-  font-size: 9px;
++  color: #939fb7;
++  font-size: 11px;
+   font-weight: 800;
+   letter-spacing: 0.13em;
+   text-transform: uppercase;
+@@ -394,8 +421,8 @@ select {
+   gap: 10px;
+   padding: 0 11px;
+   border-radius: 9px;
+-  color: #bad0c9;
+-  font-size: 12px;
++  color: #c9d0df;
++  font-size: 13px;
+   font-weight: 650;
+   transition: color 140ms ease, background 140ms ease;
+ }
+@@ -406,8 +433,8 @@ select {
+ }
+ 
+ .nav-group a.active {
+-  background: #f2f7f0;
+-  color: #173c34;
++  background: var(--gold-soft);
++  color: var(--brand-dark);
+   box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+ }
+ 
+@@ -426,31 +453,31 @@ select {
+   padding: 2px 6px;
+   border-radius: 999px;
+   background: rgb(255 255 255 / 10%);
+-  color: #dbe8e3;
+-  font-size: 9px;
++  color: #e7eaf1;
++  font-size: 11px;
+   text-align: center;
+ }
+ 
+ .nav-group a.active small {
+-  background: #e0ece7;
+-  color: var(--brand-dark);
++  background: #efe1b8;
++  color: #58400f;
+ }
+ 
+ .nav-group a.disabled {
+-  color: #718c83;
++  color: #737e96;
+   cursor: not-allowed;
+   opacity: 0.66;
+ }
+ 
+ .nav-group a.disabled:hover {
+   background: transparent;
+-  color: #718c83;
++  color: #737e96;
+ }
+ 
+ .sidebar-footer {
+   padding: 16px;
+   border-top: 1px solid rgb(255 255 255 / 9%);
+-  background: rgb(7 35 29 / 17%);
++  background: rgb(0 0 0 / 14%);
+ }
+ 
+ .closing-progress {
+@@ -464,11 +491,11 @@ select {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+-  font-size: 10px;
++  font-size: 12px;
+ }
+ 
+ .closing-head span {
+-  color: #b4c8c2;
++  color: #c6cddd;
+ }
+ 
+ .closing-head strong {
+@@ -492,8 +519,8 @@ select {
+ 
+ .closing-progress p {
+   margin: 0;
+-  color: #89a39a;
+-  font-size: 9px;
++  color: #9da8bd;
++  font-size: 11px;
+ }
+ 
+ .profile-row {
+@@ -523,9 +550,9 @@ select {
+   height: 32px;
+   place-items: center;
+   border-radius: 50%;
+-  background: #dcebe4;
++  background: #f3e3b9;
+   color: var(--brand-dark);
+-  font-size: 10px;
++  font-size: 12px;
+   font-weight: 800;
+ }
+ 
+@@ -536,18 +563,18 @@ select {
+ }
+ 
+ .profile-row strong {
+-  font-size: 10px;
++  font-size: 12px;
+   font-weight: 700;
+ }
+ 
+ .profile-row small {
+-  color: #91aaa2;
+-  font-size: 9px;
++  color: #9da8bd;
++  font-size: 11px;
+ }
+ 
+ .main-column {
+   min-height: 100vh;
+-  margin-left: 244px;
++  margin-left: 280px;
+ }
+ 
+ .topbar {
+@@ -579,8 +606,8 @@ select {
+   padding: 0 10px 0 12px;
+   border: 1px solid var(--line);
+   border-radius: 10px;
+-  background: #f8faf7;
+-  color: #7a8782;
++  background: var(--surface-soft);
++  color: var(--muted);
+   cursor: pointer;
+   text-align: left;
+ }
+@@ -592,7 +619,7 @@ select {
+ 
+ .search-trigger span {
+   overflow: hidden;
+-  font-size: 11px;
++  font-size: 12px;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+ }
+@@ -909,7 +936,7 @@ main {
+   left: 18px;
+   margin: 0;
+   color: var(--muted);
+-  font-size: 8px;
++  font-size: 11px;
+ }
+ 
+ .mini-bars {
+@@ -1805,7 +1832,7 @@ main {
+   gap: 15px;
+   margin-top: 18px;
+   color: var(--muted);
+-  font-size: 8px;
++  font-size: 11px;
+ }
+ 
+ .product-footer > span {
+@@ -1814,11 +1841,10 @@ main {
+   gap: 6px;
+ }
+ 
+-.brand-mark.small {
+-  width: 23px;
+-  height: 23px;
+-  border-radius: 7px 7px 7px 2px;
+-  font-size: 15px;
++.brand-emblem.small {
++  width: 27px;
++  height: 27px;
++  border-radius: 8px;
+ }
+ 
+ .drawer-layer,
+@@ -1828,7 +1854,7 @@ main {
+   inset: 0;
+   display: flex;
+   justify-content: flex-end;
+-  background: rgb(10 37 31 / 34%);
++  background: rgb(6 17 39 / 42%);
+   backdrop-filter: blur(3px);
+   animation: fade-in 160ms ease-out;
+ }
+diff --git a/app/layout.tsx b/app/layout.tsx
+index f0f2666..f3bb627 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -13,9 +13,9 @@ const newsreader = Newsreader({
+   subsets: ["latin"],
+ });
+ 
+-const title = "Clareza | Central de comando empresarial";
++const title = "Mourão Clareza Contábil e Financeira | Central de comando";
+ const description =
+-  "Contabilidade e finanças explicadas para decisões mais claras e seguras.";
++  "Gestão contábil e financeira explicada para decisões mais claras, seguras e auditáveis.";
+ 
+ export async function generateMetadata(): Promise<Metadata> {
+   const requestHeaders = await headers();
+@@ -31,15 +31,20 @@ export async function generateMetadata(): Promise<Metadata> {
+     title,
+     description,
+     icons: {
+-      icon: "/favicon.svg",
+-      shortcut: "/favicon.svg",
++      icon: "/brand/mourao-crest-navy.jpeg",
++      shortcut: "/brand/mourao-crest-navy.jpeg",
+     },
+     openGraph: {
+       title,
+       description,
+       type: "website",
+       locale: "pt_BR",
+-      images: [{ url: imageUrl, width: 1733, height: 907, alt: "Clareza — Menos complexidade. Mais clareza." }],
++      images: [{
++        url: imageUrl,
++        width: 1733,
++        height: 907,
++        alt: "Mourão Clareza Contábil e Financeira",
++      }],
+     },
+     twitter: {
+       card: "summary_large_image",
