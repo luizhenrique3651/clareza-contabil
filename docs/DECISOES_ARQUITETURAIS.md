@@ -1,50 +1,30 @@
-# DECISÕES ARQUITETURAIS — Mourão Clareza Contábil e Financeira (Java 21 + React 19)
+# ÍNDICE DE DECISÕES ARQUITETURAIS (ADRs) — Mourão Clareza Contábil e Financeira
 
-Este documento consolida as decisões arquiteturais vigentes no monorepo refatorado (`/Users/luiz/Documents/clareza-contabil`). Os registros formais detalhados (ADRs) estão em [`specs/adr/`](../specs/adr).
-
----
-
-## 1. Stack Tecnológica Oficial (`ADR-001`)
-
-- **Backend:** Java 21 LTS + Spring Boot 3.3 + Maven (`backend/pom.xml`), estruturado como **Monólito Modular com Arquitetura Hexagonal (Ports & Adapters)** nos pacotes:
-  - `br.com.mouraoclareza.shared` (Kernel Compartilhado)
-  - `br.com.mouraoclareza.iam` (Identidade, Sessão e Acesso Multi-Tenant)
-  - `br.com.mouraoclareza.financial` (Catálogos, Contas a Pagar/Receber, Baixas e Eventos)
-  - `br.com.mouraoclareza.reconciliation` (Contas Bancárias, Importação OFX/CSV e Conciliação)
-  - `br.com.mouraoclareza.accounting` (Motor Contábil de Partidas Dobradas — Fase 4)
-- **Banco de Dados & Migrações:** PostgreSQL 16/17 gerenciado pelo **Flyway** (`backend/src/main/resources/db/migration/V1__init.sql` até `V8__user_sessions_and_auth_hardening.sql`).
-- **Frontend:** React 19 + Vite 6 + TypeScript 5 (`frontend/`), SPA desacoplada consumindo `/api/v1/**` sob o contrato OpenAPI 3.1 ([`specs/openapi/clareza-api-v1.yaml`](../specs/openapi/clareza-api-v1.yaml)).
-- **Legado Congelado:** Todo o código anterior em Node.js/Vinext/Prisma permanece somente para consulta em [`legacy/`](../legacy).
+> **Instrução para Agentes de IA (Antigravity / Claude Code):**  
+> Este arquivo é o **Índice Roteador de ADRs**. Para economizar janela de contexto (*Progressive Disclosure*), **não** carregue todos os ADRs de uma só vez: consulte a tabela abaixo e leia apenas os arquivos `specs/adr/ADR-00X-*.md` relevantes para o módulo ou Task (`CLZ-XXX`) em execução.
 
 ---
 
-## 2. Isolamento Multi-Tenant e Row-Level Security (`ADR-002`)
+## Tabela de Roteamento de ADRs (`specs/adr/`)
 
-- Toda operação de leitura ou escrita em tabelas de negócio deve executar dentro do [`RlsTransactionExecutor`](../backend/src/main/java/br/com/mouraoclareza/shared/security/RlsTransactionExecutor.java).
-- Ao abrir a transação (com `spring.datasource.hikari.auto-commit=false`), o backend executa na mesma conexão física:
-  1. `SET LOCAL ROLE clarity_app`
-  2. `SELECT set_config('app.tenant_id', ?, true), set_config('app.user_id', ?, true), set_config('app.company_ids', ?, true), set_config('app.branch_ids', ?, true), set_config('app.tenant_wide_access', ?, true)`
-- O frontend **nunca** é fonte de autorização. Os cabeçalhos `X-Clareza-Tenant-Id`, `X-Clareza-Company-Id` e `X-Clareza-Branch-Id` representam apenas a seleção operacional desejada e são rigorosamente validados contra os vínculos ativos retornados por `app.resolve_identity_access`.
-
----
-
-## 3. Autenticação e Sessões Persistidas (`ADR-003`)
-
-- A autenticação em produção opera com Spring Security 6 (`ClarezaSecurityConfig` + `ClarezaAuthenticationFilter`) validando tokens de sessão persistidos na tabela `user_sessions` (via hash SHA-256 do token em cookie `HttpOnly` `clareza_session` ou `Authorization: Bearer`) e/ou JWT OAuth2/OIDC.
-- Para execução determinística de testes automatizados, a propriedade `clareza.security.allow-test-email-header` (desabilitada por padrão e habilitada apenas no perfil `test`) permite injetar `X-Clareza-Verified-User-Email`.
+| ADR | Arquivo em `specs/adr/` | Módulos Afetados | Quando Ler (Gatilho para o Agente) | Invariante Inegociável (Resumo de 1 Linha) |
+|---|---|---|---|---|
+| **ADR-001** | [`ADR-001-java21-spring-modulith-hexagonal.md`](../specs/adr/ADR-001-java21-spring-modulith-hexagonal.md) | Todos (`backend`, `frontend`) | Ao criar novos pacotes, módulos, entidades ou adapters | Monólito Modular Hexagonal (`domain` puro sem Spring/JPA; `application`; `infrastructure`; `presentation`). |
+| **ADR-002** | [`ADR-002-postgresql-rls-transaction-propagation.md`](../specs/adr/ADR-002-postgresql-rls-transaction-propagation.md) | `shared`, `financial`, `reconciliation`, `accounting` | Ao escrever queries SQL/JDBC/JPA ou serviços transacionais | Toda transação deve rodar em `RlsTransactionExecutor` (`SET LOCAL ROLE clarity_app` + `SELECT set_config(..., true)`). |
+| **ADR-003** | [`ADR-003-oauth2-jwt-and-persisted-sessions.md`](../specs/adr/ADR-003-oauth2-jwt-and-persisted-sessions.md) | `iam`, `shared.security` | Ao alterar autenticação, filtros de segurança ou `/api/v1/me` | Sessões validadas no servidor (`user_sessions` / OAuth2 JWT) e escopo verificado via `app.resolve_identity_access`. |
+| **ADR-004** | [`ADR-004-accounting-engine-double-entry.md`](../specs/adr/ADR-004-accounting-engine-double-entry.md) | `accounting`, `financial`, `reconciliation` | Ao implementar a Fase 4 (`EPIC-07` — Tasks `CLZ-020` a `CLZ-022`) | Partidas dobradas estritas ($\sum \text{Débito} = \sum \text{Crédito}$), lançamentos postados imutáveis e reversão apenas por estorno. |
+| **ADR-005** | [`ADR-005-monetary-precision-and-manaus-timezone.md`](../specs/adr/ADR-005-monetary-precision-and-manaus-timezone.md) | `shared.domain`, `financial`, `reconciliation`, `accounting` | Ao manipular valores monetários, datas de vencimento ou `OVERDUE` | Proibido `float`/`double`; usar sempre `Money` (`BigDecimal` escala 4, `NUMERIC(19,4)`) e fuso `America/Manaus`. |
+| **ADR-006** | [`ADR-006-idempotency-audit-and-bound-cursors.md`](../specs/adr/ADR-006-idempotency-audit-and-bound-cursors.md) | `shared`, controllers e services de negócio | Ao criar endpoints `POST` (mutações) ou `GET` paginados e erros HTTP | Exigir `IdempotencyExecutor`, gravar `AuditTrailService` (`integrity_hash`), paginar com `BoundCursorCodec` e erros RFC 9457. |
+| **ADR-007** | [`ADR-007-react19-frontend-and-context-safety.md`](../specs/adr/ADR-007-react19-frontend-and-context-safety.md) | `frontend` | Ao criar telas React, hooks de API ou alterar seletor de contexto | Zero-Trust no `localStorage` (`safeNavigationStorage`), `AbortController` contra *race conditions* e paleta Mourão Clareza. |
 
 ---
 
-## 4. Precisão Monetária e Fuso Horário Operacional
+## Mapeamento Rápido Task Jira (`CLZ`) $\rightarrow$ ADRs Obrigatórios
 
-- É **estritamente proibido** utilizar `float` ou `double` para valores financeiros.
-- Todo valor monetário usa o Value Object [`Money`](../backend/src/main/java/br/com/mouraoclareza/shared/domain/Money.java) (`BigDecimal` com escala fixa `4`, `RoundingMode.UNNECESSARY`, limite `999999999999999.9999`), mapeado para `NUMERIC(19,4)` no PostgreSQL.
-- O fuso horário de negócio para cálculo de vencimento (`OVERDUE`) é `America/Manaus` (`FinancialRecordDomainPolicy.MANAUS_ZONE`).
-
----
-
-## 5. Idempotência, Auditoria e Paginação por Cursor
-
-- **Idempotência:** Toda mutação financeira exige `Idempotency-Key` (8 a 128 caracteres) e adquire lock transacional `SELECT pg_advisory_xact_lock(hashtextextended(?, 0))` via [`IdempotencyExecutor`](../backend/src/main/java/br/com/mouraoclareza/shared/idempotency/IdempotencyExecutor.java).
-- **Auditoria e Eventos Imutáveis:** Toda mutação grava registro em `audit_logs` com `integrity_hash` SHA-256 via [`AuditTrailService`](../backend/src/main/java/br/com/mouraoclareza/shared/audit/AuditTrailService.java), protegido por triggers PostgreSQL que impedem `UPDATE` e `DELETE`.
-- **Cursores Vinculados ao Contexto:** Cursores de paginação são assinados com hash SHA-256 do escopo `(resource, tenantId, companyId, branchId, order, filters)` via [`BoundCursorCodec`](../backend/src/main/java/br/com/mouraoclareza/shared/pagination/BoundCursorCodec.java).
+- **`CLZ-001` a `CLZ-006` (Fundação & Shared Kernel):** `ADR-001`, `ADR-002`, `ADR-005`, `ADR-006`
+- **`CLZ-007` a `CLZ-010` (IAM, Sessão & Contexto React):** `ADR-002`, `ADR-003`, `ADR-006`, `ADR-007`
+- **`CLZ-011` a `CLZ-014` (Núcleo Financeiro AP/AR, Baixas & Eventos):** `ADR-001`, `ADR-002`, `ADR-005`, `ADR-006`
+- **`CLZ-015` a `CLZ-017` (Importação OFX/CSV & Conciliação Bancária):** `ADR-001`, `ADR-002`, `ADR-005`, `ADR-006`
+- **`CLZ-018` a `CLZ-019` (Workspaces React Financeiro & Conciliação):** `ADR-005`, `ADR-006`, `ADR-007`
+- **`CLZ-020` a `CLZ-022` (Motor Contábil de Partidas Dobradas — Fase 4):** `ADR-001`, `ADR-002`, `ADR-004`, `ADR-005`, `ADR-006`
+- **`CLZ-023` a `CLZ-025` (Observabilidade, Hardening & Cutover):** Todos (`ADR-001` a `ADR-007`)
