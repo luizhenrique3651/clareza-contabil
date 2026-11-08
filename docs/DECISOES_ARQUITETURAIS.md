@@ -1,163 +1,50 @@
-# DECISOES_ARQUITETURAIS — Clareza
+# DECISÕES ARQUITETURAIS — Mourão Clareza Contábil e Financeira (Java 21 + React 19)
 
-Este documento registra decisões que devem permanecer estáveis até que exista evidência técnica suficiente para mudá-las.
-
-## 1. Arquitetura
-
-Direção atual:
-
-- aplicação web em arquitetura de monólito modular;
-- API versionada;
-- PostgreSQL;
-- Prisma;
-- migrations SQL para proteções avançadas;
-- evolução por fatias verticais.
-
-Não reescrever o sistema apenas por preferência tecnológica.
+Este documento consolida as decisões arquiteturais vigentes no monorepo refatorado (`/Users/luiz/Documents/clareza-contabil`). Os registros formais detalhados (ADRs) estão em [`specs/adr/`](../specs/adr).
 
 ---
 
-## 2. Multi-tenancy
+## 1. Stack Tecnológica Oficial (`ADR-001`)
 
-Isolamento em camadas:
-
-- autorização no servidor;
-- RBAC;
-- contexto transacional;
-- RLS PostgreSQL;
-- constraints compostas quando aplicável.
-
-O frontend não é fonte de autorização.
-
----
-
-## 3. Contexto
-
-O navegador pode solicitar empresa/unidade ativa para navegação.
-
-O servidor valida a seleção contra o conjunto autorizado.
-
-Contexto PostgreSQL sensível deve permanecer limitado à transação/requisição, evitando vazamento em conexões reutilizadas.
+- **Backend:** Java 21 LTS + Spring Boot 3.3 + Maven (`backend/pom.xml`), estruturado como **Monólito Modular com Arquitetura Hexagonal (Ports & Adapters)** nos pacotes:
+  - `br.com.mouraoclareza.shared` (Kernel Compartilhado)
+  - `br.com.mouraoclareza.iam` (Identidade, Sessão e Acesso Multi-Tenant)
+  - `br.com.mouraoclareza.financial` (Catálogos, Contas a Pagar/Receber, Baixas e Eventos)
+  - `br.com.mouraoclareza.reconciliation` (Contas Bancárias, Importação OFX/CSV e Conciliação)
+  - `br.com.mouraoclareza.accounting` (Motor Contábil de Partidas Dobradas — Fase 4)
+- **Banco de Dados & Migrações:** PostgreSQL 16/17 gerenciado pelo **Flyway** (`backend/src/main/resources/db/migration/V1__init.sql` até `V8__user_sessions_and_auth_hardening.sql`).
+- **Frontend:** React 19 + Vite 6 + TypeScript 5 (`frontend/`), SPA desacoplada consumindo `/api/v1/**` sob o contrato OpenAPI 3.1 ([`specs/openapi/clareza-api-v1.yaml`](../specs/openapi/clareza-api-v1.yaml)).
+- **Legado Congelado:** Todo o código anterior em Node.js/Vinext/Prisma permanece somente para consulta em [`legacy/`](../legacy).
 
 ---
 
-## 4. Segurança fail-closed
+## 2. Isolamento Multi-Tenant e Row-Level Security (`ADR-002`)
 
-Na ausência de:
-
-- identidade;
-- membership;
-- empresa autorizada;
-- unidade autorizada;
-- permissão;
-- contexto de banco exigido;
-
-a operação deve ser negada.
-
-Nunca conceder acesso amplo como fallback.
+- Toda operação de leitura ou escrita em tabelas de negócio deve executar dentro do [`RlsTransactionExecutor`](../backend/src/main/java/br/com/mouraoclareza/shared/security/RlsTransactionExecutor.java).
+- Ao abrir a transação (com `spring.datasource.hikari.auto-commit=false`), o backend executa na mesma conexão física:
+  1. `SET LOCAL ROLE clarity_app`
+  2. `SELECT set_config('app.tenant_id', ?, true), set_config('app.user_id', ?, true), set_config('app.company_ids', ?, true), set_config('app.branch_ids', ?, true), set_config('app.tenant_wide_access', ?, true)`
+- O frontend **nunca** é fonte de autorização. Os cabeçalhos `X-Clareza-Tenant-Id`, `X-Clareza-Company-Id` e `X-Clareza-Branch-Id` representam apenas a seleção operacional desejada e são rigorosamente validados contra os vínculos ativos retornados por `app.resolve_identity_access`.
 
 ---
 
-## 5. Dados financeiros
+## 3. Autenticação e Sessões Persistidas (`ADR-003`)
 
-Valores monetários devem usar representação decimal apropriada.
-
-Pagamentos e recebimentos devem evoluir para eventos próprios.
-
-Saldo e status devem ser derivados de eventos e regras de negócio, evitando booleanos manuais como única fonte de verdade.
+- A autenticação em produção opera com Spring Security 6 (`ClarezaSecurityConfig` + `ClarezaAuthenticationFilter`) validando tokens de sessão persistidos na tabela `user_sessions` (via hash SHA-256 do token em cookie `HttpOnly` `clareza_session` ou `Authorization: Bearer`) e/ou JWT OAuth2/OIDC.
+- Para execução determinística de testes automatizados, a propriedade `clareza.security.allow-test-email-header` (desabilitada por padrão e habilitada apenas no perfil `test`) permite injetar `X-Clareza-Verified-User-Email`.
 
 ---
 
-## 6. Auditoria
+## 4. Precisão Monetária e Fuso Horário Operacional
 
-Operações financeiras críticas devem ter rastreabilidade.
-
-A auditoria deve ser append-only quando possível.
-
-Não registrar segredos, tokens ou dados sensíveis desnecessários.
-
-O hash atual da Fase 0 é evidência de integridade básica; mecanismos autenticados/encadeados podem ser avaliados antes de produção conforme requisitos.
+- É **estritamente proibido** utilizar `float` ou `double` para valores financeiros.
+- Todo valor monetário usa o Value Object [`Money`](../backend/src/main/java/br/com/mouraoclareza/shared/domain/Money.java) (`BigDecimal` com escala fixa `4`, `RoundingMode.UNNECESSARY`, limite `999999999999999.9999`), mapeado para `NUMERIC(19,4)` no PostgreSQL.
+- O fuso horário de negócio para cálculo de vencimento (`OVERDUE`) é `America/Manaus` (`FinancialRecordDomainPolicy.MANAUS_ZONE`).
 
 ---
 
-## 7. Idempotência
+## 5. Idempotência, Auditoria e Paginação por Cursor
 
-Comandos financeiros suscetíveis a retry devem ser idempotentes.
-
-Requisições concorrentes com mesma chave e mesmo conteúdo devem convergir para uma única operação persistida.
-
-Mesma chave com conteúdo diferente deve gerar conflito.
-
----
-
-## 8. Migrations
-
-Prisma schema e SQL devem permanecer consistentes.
-
-Proteções que não são expressáveis adequadamente no Prisma podem permanecer em SQL, desde que:
-
-- documentadas;
-- testadas;
-- preservadas em regressão.
-
----
-
-## 9. Interface e mocks
-
-A identidade visual do Clareza deve ser preservada.
-
-Mocks podem coexistir temporariamente com dados reais apenas quando claramente identificados.
-
-Não atribuir status operacional a dados demonstrativos.
-
----
-
-## 10. Contabilidade
-
-DRE deve ser consequência do motor contábil, não um relatório isolado com números independentes.
-
-A modelagem contábil definitiva exige decisão humana antes da Fase 4.
-
----
-
-## 11. Fiscal
-
-O módulo fiscal deve ser domínio próprio do Clareza, desacoplado de dependência obrigatória do Conta Azul.
-
-Integrações municipais devem ser adaptáveis.
-
-A Fase 6 exige definição humana dos provedores/municípios alvo.
-
----
-
-## 12. IA
-
-IA será adicionada depois que:
-
-- dados;
-- autorização;
-- auditoria;
-- cálculos;
-- origem dos indicadores;
-
-forem confiáveis.
-
-A IA deve explicar com fontes e não contornar controles.
-
----
-
-## 13. Produção
-
-Não declarar produção pronta enquanto não houver, no mínimo:
-
-- autenticação/sessão definidas;
-- segredos externos ao código;
-- TLS;
-- backup e restauração testados;
-- observabilidade;
-- CI/CD e regressão;
-- proteção de borda;
-- revisão de dependências;
-- testes E2E;
-- procedimento de incidente;
-- revisão de segurança/pentest proporcional ao risco.
+- **Idempotência:** Toda mutação financeira exige `Idempotency-Key` (8 a 128 caracteres) e adquire lock transacional `SELECT pg_advisory_xact_lock(hashtextextended(?, 0))` via [`IdempotencyExecutor`](../backend/src/main/java/br/com/mouraoclareza/shared/idempotency/IdempotencyExecutor.java).
+- **Auditoria e Eventos Imutáveis:** Toda mutação grava registro em `audit_logs` com `integrity_hash` SHA-256 via [`AuditTrailService`](../backend/src/main/java/br/com/mouraoclareza/shared/audit/AuditTrailService.java), protegido por triggers PostgreSQL que impedem `UPDATE` e `DELETE`.
+- **Cursores Vinculados ao Contexto:** Cursores de paginação são assinados com hash SHA-256 do escopo `(resource, tenantId, companyId, branchId, order, filters)` via [`BoundCursorCodec`](../backend/src/main/java/br/com/mouraoclareza/shared/pagination/BoundCursorCodec.java).
